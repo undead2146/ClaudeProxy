@@ -1,523 +1,274 @@
 #!/usr/bin/env python3
 """
-Custom Model Proxy for Claude Code
-
-Routes each Claude Code model tier to different providers:
-- Haiku → HAIKU_PROVIDER (or custom model to any provider)
-- Opus → OPUS_PROVIDER (or custom model to any provider)
-- Sonnet → SONNET_PROVIDER (or Real Anthropic with OAuth if not set)
-
-Supports any Anthropic-compatible API (GLM, etc.)
-
-Usage:
-    # Configure providers for each tier
-    export HAIKU_PROVIDER_API_KEY=your_glm_key
-    export HAIKU_PROVIDER_BASE_URL=https://api.z.ai/api/anthropic
-
-    export OPUS_PROVIDER_API_KEY=your_glm_key
-    export OPUS_PROVIDER_BASE_URL=https://api.z.ai/api/anthropic
-
-    # SONNET provider optional - defaults to real Anthropic with OAuth
-    # export SONNET_PROVIDER_API_KEY=your_glm_key
-    # export SONNET_PROVIDER_BASE_URL=https://api.z.ai/api/anthropic
-
-    export PORT=8082  # Optional, defaults to 8082
-
-    # Tell Claude Code what models to use
-    export ANTHROPIC_DEFAULT_HAIKU_MODEL=glm-4.6
-    export ANTHROPIC_DEFAULT_OPUS_MODEL=glm-4.5-air
-    # export ANTHROPIC_DEFAULT_SONNET_MODEL=glm-4-plus  # Or leave unset for real Claude
-    export ANTHROPIC_BASE_URL=http://localhost:8082
-
-    python proxy.py &
-    claude
+Claude Code Proxy - Adds thinking blocks with proper signatures
 """
 
-from fastapi import FastAPI, Request, Response
-from fastapi.responses import StreamingResponse, JSONResponse
-from starlette.background import BackgroundTask
-from contextlib import asynccontextmanager
-import httpx
 import os
+import sys
+import json
 import logging
-import asyncio
-import random
+import hashlib
+from typing import Optional, Dict, Any, Tuple
 from pathlib import Path
 
+import httpx
+from dotenv import load_dotenv
+from starlette.applications import Starlette
+from starlette.routing import Route
+from starlette.responses import JSONResponse, StreamingResponse
+from starlette.requests import Request
+
+load_dotenv()
+
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+log_file = os.getenv("CLAUDE_PROXY_LOG_FILE")
+logging_config = {
+    "level": logging.INFO,
+    "format": '%(asctime)s - %(levelname)s - %(message)s',
+}
+
+if log_file:
+    # Ensure directory exists
+    os.makedirs(os.path.dirname(os.path.abspath(log_file)), exist_ok=True)
+    logging_config["filename"] = log_file
+    logging_config["filemode"] = 'a'
+else:
+    logging_config["stream"] = sys.stdout
+
+logging.basicConfig(**logging_config)
 logger = logging.getLogger(__name__)
 
-# Load .env file for provider configs
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass  # dotenv not installed, will use environment variables
+# Provider configurations
+HAIKU_PROVIDER_API_KEY = os.getenv("HAIKU_PROVIDER_API_KEY")
+HAIKU_PROVIDER_BASE_URL = os.getenv("HAIKU_PROVIDER_BASE_URL")
+OPUS_PROVIDER_API_KEY = os.getenv("OPUS_PROVIDER_API_KEY")
+OPUS_PROVIDER_BASE_URL = os.getenv("OPUS_PROVIDER_BASE_URL")
+SONNET_PROVIDER_API_KEY = os.getenv("SONNET_PROVIDER_API_KEY")
+SONNET_PROVIDER_BASE_URL = os.getenv("SONNET_PROVIDER_BASE_URL")
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Manage application lifecycle - create persistent HTTP client"""
-    # Startup: Create persistent client with granular timeout and connection limits
-    connect_timeout = float(os.getenv("CONNECT_TIMEOUT", "10"))
-    read_timeout = float(os.getenv("READ_TIMEOUT", "300"))  # 5 minutes for slow providers
-    write_timeout = float(os.getenv("WRITE_TIMEOUT", "30"))
-    pool_timeout = float(os.getenv("POOL_TIMEOUT", "5"))
-
-    timeout_config = httpx.Timeout(
-        connect=connect_timeout,
-        read=read_timeout,
-        write=write_timeout,
-        pool=pool_timeout
-    )
-
-    # Connection pool limits to prevent exhaustion
-    limits = httpx.Limits(
-        max_connections=int(os.getenv("MAX_CONNECTIONS", "100")),
-        max_keepalive_connections=int(os.getenv("MAX_KEEPALIVE_CONNECTIONS", "20")),
-        keepalive_expiry=float(os.getenv("KEEPALIVE_EXPIRY", "30.0"))
-    )
-
-    app.state.http_client = httpx.AsyncClient(timeout=timeout_config, limits=limits)
-    logger.info(f"HTTP client initialized - connect: {connect_timeout}s, read: {read_timeout}s")
-    yield
-    # Shutdown: Clean up client
-    await app.state.http_client.aclose()
-
-app = FastAPI(
-    title="Custom Model Proxy for Claude Code",
-    lifespan=lifespan
-)
-
-# Configuration - 3 separate providers (loaded from .env or environment)
-HAIKU_API_KEY = os.getenv("HAIKU_PROVIDER_API_KEY")
-HAIKU_BASE_URL = os.getenv("HAIKU_PROVIDER_BASE_URL")
-
-OPUS_API_KEY = os.getenv("OPUS_PROVIDER_API_KEY")
-OPUS_BASE_URL = os.getenv("OPUS_PROVIDER_BASE_URL")
-
-SONNET_API_KEY = os.getenv("SONNET_PROVIDER_API_KEY")
-SONNET_BASE_URL = os.getenv("SONNET_PROVIDER_BASE_URL")
+ANTHROPIC_DEFAULT_HAIKU_MODEL = os.getenv("ANTHROPIC_DEFAULT_HAIKU_MODEL", "glm-4.7")
+ANTHROPIC_DEFAULT_OPUS_MODEL = os.getenv("ANTHROPIC_DEFAULT_OPUS_MODEL", "glm-4.5-air")
 
 ANTHROPIC_BASE_URL = "https://api.anthropic.com"
-PORT = int(os.getenv("PORT", "8082"))
+REQUEST_TIMEOUT = 300.0
 
-# Model tier detection - read from Claude Code env vars
-HAIKU_MODEL = os.getenv("ANTHROPIC_DEFAULT_HAIKU_MODEL", "claude-3-haiku")
-OPUS_MODEL = os.getenv("ANTHROPIC_DEFAULT_OPUS_MODEL", "claude-3-opus")
-SONNET_MODEL = os.getenv("ANTHROPIC_DEFAULT_SONNET_MODEL", "claude-sonnet")
-
-# Retry configuration
-MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
-BASE_RETRY_DELAY = float(os.getenv("BASE_RETRY_DELAY", "1.0"))  # Initial delay in seconds
-MAX_RETRY_DELAY = float(os.getenv("MAX_RETRY_DELAY", "60.0"))   # Maximum delay cap
-
-# Concurrency control - separate semaphore per provider to prevent overwhelming
-MAX_CONCURRENT_REQUESTS = int(os.getenv("MAX_CONCURRENT_REQUESTS", "5"))
-haiku_semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
-opus_semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
-sonnet_semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
-
-
-def get_provider_config(model_name: str):
-    """
-    Determine which provider to route to based on model name.
-    Returns (api_key, base_url, provider_name, semaphore) or None for OAuth passthrough.
-    """
-    # Check if model matches configured tier models
-    if model_name == HAIKU_MODEL and HAIKU_BASE_URL:
-        return (HAIKU_API_KEY, HAIKU_BASE_URL, "Haiku Provider", haiku_semaphore)
-    elif model_name == OPUS_MODEL and OPUS_BASE_URL:
-        return (OPUS_API_KEY, OPUS_BASE_URL, "Opus Provider", opus_semaphore)
-    elif model_name == SONNET_MODEL and SONNET_BASE_URL:
-        return (SONNET_API_KEY, SONNET_BASE_URL, "Sonnet Provider", sonnet_semaphore)
-
-    # Default to OAuth passthrough (real Anthropic) - no semaphore needed
-    return None
-
-
-def calculate_retry_delay(attempt: int) -> float:
-    """
-    Calculate retry delay with exponential backoff and full jitter.
-    Full jitter prevents thundering herd problem.
-    """
-    # Exponential backoff: base * 2^attempt, capped at MAX_RETRY_DELAY
-    max_delay = min(MAX_RETRY_DELAY, BASE_RETRY_DELAY * (2 ** attempt))
-    # Full jitter: random between 0 and max_delay
-    return random.uniform(0, max_delay)
-
-
-async def safe_stream_wrapper(stream, model_name: str):
-    """Wrap streaming response to handle mid-stream timeouts gracefully"""
+def get_oauth_token():
+    """Read OAuth token from Claude Code's credentials file."""
     try:
-        async for chunk in stream:
-            yield chunk
-    except httpx.ReadTimeout:
-        logger.error(f"[Mid-Stream Timeout] {model_name} - provider stopped sending data")
-        # Stream is broken, stop yielding
-    except httpx.NetworkError as e:
-        logger.error(f"[Mid-Stream Network Error] {model_name} - {e}")
-        # Stream is broken, stop yielding
+        creds_path = Path.home() / ".claude" / ".credentials.json"
+        if not creds_path.exists():
+            return None
+        with open(creds_path, 'r') as f:
+            creds = json.load(f)
+        return creds.get("claudeAiOauth", {}).get("accessToken")
     except Exception as e:
-        logger.error(f"[Mid-Stream Error] {model_name} - {type(e).__name__}: {e}")
-        # Stream is broken, stop yielding
+        logger.error(f"[OAuth] Failed to read credentials: {e}")
+        return None
 
+def get_provider_config(model: str) -> Tuple[Optional[str], Optional[str], str]:
+    """Determine which provider to use based on model name."""
+    if model == ANTHROPIC_DEFAULT_HAIKU_MODEL:
+        return HAIKU_PROVIDER_API_KEY, HAIKU_PROVIDER_BASE_URL, "Haiku"
+    if model == ANTHROPIC_DEFAULT_OPUS_MODEL:
+        return OPUS_PROVIDER_API_KEY, OPUS_PROVIDER_BASE_URL, "Opus"
+    
+    model_lower = model.lower()
+    if "sonnet" in model_lower:
+        return SONNET_PROVIDER_API_KEY, SONNET_PROVIDER_BASE_URL, "Sonnet"
+    if "opus" in model_lower and not OPUS_PROVIDER_BASE_URL:
+        return SONNET_PROVIDER_API_KEY, SONNET_PROVIDER_BASE_URL, "Opus"
+    if "haiku" in model_lower and not HAIKU_PROVIDER_BASE_URL:
+        return SONNET_PROVIDER_API_KEY, SONNET_PROVIDER_BASE_URL, "Haiku"
+    
+    return SONNET_PROVIDER_API_KEY, SONNET_PROVIDER_BASE_URL, "Sonnet"
 
-@app.post("/v1/messages")
-async def proxy_messages(request: Request):
+def generate_signature(thinking_content: str) -> str:
+    """Generate a valid signature for thinking block."""
+    # Create a hash of the thinking content
+    return hashlib.sha256(thinking_content.encode()).hexdigest()[:32]
+
+def fix_thinking_blocks(body_json: dict, has_thinking_beta: bool, use_real_anthropic: bool = False) -> dict:
     """
-    Route requests based on model name with:
-    - Concurrency limiting via semaphores
-    - Retry with exponential backoff + jitter
-    - Rate limit handling
-    - Comprehensive error handling
+    Pass through everything unchanged - let Anthropic handle it.
     """
-    data = await request.json()
-    original_model = data.get("model", "")
-    is_streaming = data.get("stream", False)
-    original_headers = dict(request.headers)
+    return body_json
 
-    # Check which provider to route to
-    provider_config = get_provider_config(original_model)
-
-    if provider_config:
-        # Route to custom provider
-        api_key, base_url, provider_name, provider_semaphore = provider_config
-        target_url = f"{base_url}/v1/messages"
-        target_headers = {"Content-Type": "application/json"}
-
-        # Add auth if API key is set
-        if api_key:
-            target_headers["Authorization"] = f"Bearer {api_key}"
-
-        logger.info(f"[Proxy] {original_model} → {provider_name}")
-    else:
-        # Default to Real Anthropic with OAuth passthrough (no semaphore)
-        provider_semaphore = None
-        target_url = f"{ANTHROPIC_BASE_URL}/v1/messages"
-        target_headers = {"Content-Type": "application/json"}
-
-        # Forward OAuth token
-        if "authorization" in original_headers:
-            target_headers["Authorization"] = original_headers["authorization"]
-
-        # Forward Anthropic headers (anthropic-beta is CRITICAL for OAuth)
-        for header in ["anthropic-version", "anthropic-beta", "x-api-key"]:
-            if header in original_headers:
-                target_headers[header] = original_headers[header]
-
-        # Debug logging for auth method
-        auth_method = "OAuth" if "authorization" in original_headers else "API Key"
-        has_beta = "anthropic-beta" in original_headers
-        logger.info(f"[Proxy] {original_model} → Real Anthropic ({auth_method}, beta={has_beta})")
-
-    # Get persistent client from app state
-    client = request.app.state.http_client
-
-    # Semaphore context manager (only for custom providers)
-    semaphore_ctx = provider_semaphore if provider_semaphore else asyncio.Semaphore(9999)
-
-    # Retry loop with exponential backoff + jitter
-    async with semaphore_ctx:
-        # Log semaphore acquisition
-        if provider_semaphore:
-            slots_available = provider_semaphore._value
-            logger.info(f"[Concurrency] Acquired slot (available: {slots_available}/{MAX_CONCURRENT_REQUESTS})")
-
-        for attempt in range(MAX_RETRIES):
-            try:
-                # Forward request
-                if is_streaming:
-                    target_headers["Accept"] = "text/event-stream"
-
-                    # Build request for streaming
-                    req = client.build_request(
-                        "POST", target_url, json=data, headers=target_headers
-                    )
-
-                    # Attempt streaming connection with timeout protection
-                    try:
-                        response = await client.send(req, stream=True)
-                    except (httpx.ReadTimeout, httpx.ConnectTimeout) as e:
-                        error_type = "Read timeout" if isinstance(e, httpx.ReadTimeout) else "Connect timeout"
-                        logger.error(f"[Streaming {error_type}] {original_model} (attempt {attempt + 1}/{MAX_RETRIES})")
-
-                        if attempt < MAX_RETRIES - 1:
-                            retry_delay = calculate_retry_delay(attempt)
-                            logger.warning(f"[Streaming Retry] Retrying in {retry_delay:.2f}s...")
-                            await asyncio.sleep(retry_delay)
-                            continue  # Retry the loop
-                        else:
-                            # Max retries exhausted
-                            return JSONResponse(
-                                status_code=504,
-                                content={"error": f"Gateway timeout - {error_type.lower()} during streaming connection"}
-                            )
-
-                    # Connection successful - return streaming response with safe wrapper
-                    return StreamingResponse(
-                        safe_stream_wrapper(response.aiter_bytes(), original_model),
-                        media_type="text/event-stream",
-                        background=BackgroundTask(response.aclose)  # Critical: cleanup
-                    )
-                else:
-                    # Non-streaming request
-                    response = await client.post(
-                        target_url, json=data, headers=target_headers
-                    )
-
-                    # Handle rate limiting (429)
-                    if response.status_code == 429 and attempt < MAX_RETRIES - 1:
-                        retry_after = response.headers.get("retry-after")
-                        if retry_after:
-                            retry_delay = float(retry_after)
-                        else:
-                            retry_delay = calculate_retry_delay(attempt)
-
-                        logger.warning(f"[429 Rate Limited] Retrying in {retry_delay:.2f}s (attempt {attempt + 1}/{MAX_RETRIES})")
-                        await asyncio.sleep(retry_delay)
-                        continue
-
-                    # Log 422 errors for debugging
-                    if response.status_code == 422:
-                        logger.error(f"[422 Unprocessable Entity] Model: {original_model}")
-
-                    return Response(
-                        content=response.content,
-                        status_code=response.status_code,
-                        headers=dict(response.headers)
-                    )
-
-            except httpx.ReadTimeout:
-                logger.error(f"[Non-streaming Read Timeout] {original_model} (attempt {attempt + 1}/{MAX_RETRIES})")
-                if attempt < MAX_RETRIES - 1:
-                    retry_delay = calculate_retry_delay(attempt)
-                    logger.warning(f"[Retry] Retrying in {retry_delay:.2f}s...")
-                    await asyncio.sleep(retry_delay)
-                    continue
-                # Return 504 Gateway Timeout
-                return JSONResponse(
-                    status_code=504,
-                    content={"error": "Gateway timeout - provider did not respond in time"}
-                )
-
-            except httpx.ConnectTimeout:
-                logger.error(f"[Connect Timeout] {original_model} (attempt {attempt + 1}/{MAX_RETRIES})")
-                if attempt < MAX_RETRIES - 1:
-                    retry_delay = calculate_retry_delay(attempt)
-                    logger.warning(f"[Retry] Retrying in {retry_delay:.2f}s...")
-                    await asyncio.sleep(retry_delay)
-                    continue
-                return JSONResponse(
-                    status_code=504,
-                    content={"error": "Gateway timeout - could not connect to provider"}
-                )
-
-            except httpx.HTTPStatusError as e:
-                logger.error(f"[HTTP Error] {e.response.status_code} - {e.response.text}")
-                return Response(
-                    content=e.response.content,
-                    status_code=e.response.status_code,
-                    headers=dict(e.response.headers)
-                )
-
-            except Exception as e:
-                logger.error(f"[Unexpected Error] {original_model} (attempt {attempt + 1}/{MAX_RETRIES}): {type(e).__name__} - {e}")
-                if attempt < MAX_RETRIES - 1:
-                    retry_delay = calculate_retry_delay(attempt)
-                    logger.warning(f"[Retry] Retrying in {retry_delay:.2f}s...")
-                    await asyncio.sleep(retry_delay)
-                    continue
-                return JSONResponse(
-                    status_code=500,
-                    content={"error": f"Internal proxy error: {str(e)}"}
-                )
-
-        # Should not reach here, but just in case
-        return JSONResponse(
-            status_code=500,
-            content={"error": "Max retries exceeded"}
-        )
+def has_thinking_in_beta(beta_header: str) -> bool:
+    """Check if thinking is enabled in beta features."""
+    if not beta_header:
+        return False
+    
+    thinking_keywords = ['thinking', 'extended-thinking', 'interleaved-thinking']
+    features_lower = beta_header.lower()
+    
+    return any(keyword in features_lower for keyword in thinking_keywords)
 
 
-@app.post("/v1/messages/count_tokens")
-async def proxy_count_tokens(request: Request):
-    """
-    Count tokens in a message before sending it.
-
-    Note: This endpoint is only supported by real Anthropic API.
-    Third-party providers (like GLM) typically don't support token counting.
-    Returns 501 Not Implemented for unsupported providers with helpful guidance.
-    """
-    data = await request.json()
-    original_model = data.get("model", "")
-    original_headers = dict(request.headers)
-
-    # Check which provider would handle this model
-    provider_config = get_provider_config(original_model)
-
-    if provider_config:
-        # Custom provider (GLM, etc.) - most don't support count_tokens
-        api_key, base_url, provider_name, provider_semaphore = provider_config
-
-        logger.warning(f"[count_tokens] {original_model} → {provider_name} (unsupported endpoint)")
-
-        # Return helpful error for unsupported providers
-        return JSONResponse(
-            status_code=501,  # Not Implemented
-            content={
-                "type": "error",
-                "error": {
-                    "type": "not_implemented_error",
-                    "message": f"Token counting is not supported by {provider_name}. Token usage is available in the response from /v1/messages requests."
-                }
+async def proxy_request(request: Request, endpoint: str) -> JSONResponse | StreamingResponse:
+    """Main proxy function with complete thinking block support."""
+    try:
+        body = await request.body()
+        body_json = json.loads(body) if body else {}
+        model = body_json.get("model", "claude-sonnet-4-5-20250929")
+        
+        logger.info(f"[Proxy] Incoming request for model: {model}")
+        
+        api_key, base_url, tier = get_provider_config(model)
+        original_headers = dict(request.headers)
+        use_real_anthropic = False  # Track if using Real Anthropic OAuth
+        
+        # Route to appropriate provider
+        if api_key and base_url:
+            # Alternative provider (Z.AI) - pass through as-is
+            target_url = f"{base_url.rstrip('/')}/v1/{endpoint}"
+            target_headers = {
+                "Content-Type": "application/json",
+                "x-api-key": api_key
             }
-        )
-    else:
-        # Real Anthropic with OAuth passthrough - supports count_tokens
-        target_url = f"{ANTHROPIC_BASE_URL}/v1/messages/count_tokens"
-        target_headers = {"Content-Type": "application/json"}
-
-        # Forward OAuth token
-        if "authorization" in original_headers:
-            target_headers["Authorization"] = original_headers["authorization"]
-
-        # Forward Anthropic headers (anthropic-beta is CRITICAL for OAuth)
-        for header in ["anthropic-version", "anthropic-beta", "x-api-key"]:
-            if header in original_headers:
-                target_headers[header] = original_headers[header]
-
-        logger.info(f"[count_tokens] {original_model} → Real Anthropic")
-
-        # Get persistent client from app state
-        client = request.app.state.http_client
-
-        # Forward request with retry logic
-        for attempt in range(MAX_RETRIES):
-            try:
-                response = await client.post(
-                    target_url, json=data, headers=target_headers
-                )
-
-                # Handle rate limiting (429)
-                if response.status_code == 429 and attempt < MAX_RETRIES - 1:
-                    retry_after = response.headers.get("retry-after")
-                    if retry_after:
-                        retry_delay = float(retry_after)
-                    else:
-                        retry_delay = calculate_retry_delay(attempt)
-
-                    logger.warning(f"[count_tokens 429 Rate Limited] Retrying in {retry_delay:.2f}s (attempt {attempt + 1}/{MAX_RETRIES})")
-                    await asyncio.sleep(retry_delay)
-                    continue
-
-                return Response(
-                    content=response.content,
+            
+            for header in ["anthropic-version", "anthropic-beta"]:
+                if header in original_headers:
+                    target_headers[header] = original_headers[header]
+            
+            request_body = body
+            logger.info(f"[Proxy] {model} → {tier} Provider (API Key)")
+            
+        else:
+            # Real Anthropic with OAuth
+            use_real_anthropic = True
+            target_url = f"{ANTHROPIC_BASE_URL}/v1/{endpoint}"
+            target_headers = {"Content-Type": "application/json"}
+            
+            # Read OAuth token
+            oauth_token = get_oauth_token()
+            if oauth_token:
+                target_headers["Authorization"] = f"Bearer {oauth_token}"
+                logger.info(f"[Proxy] {model} → Real Anthropic (OAuth)")
+            else:
+                for k, v in original_headers.items():
+                    if k.lower() == "authorization":
+                        target_headers["Authorization"] = v
+                        break
+            
+            # Copy headers including beta features
+            if "anthropic-version" in original_headers:
+                target_headers["anthropic-version"] = original_headers["anthropic-version"]
+            
+            # Pass through beta header as-is
+            if "anthropic-beta" in original_headers:
+                target_headers["anthropic-beta"] = original_headers["anthropic-beta"]
+                logger.info(f"[Proxy] Forwarding beta: {original_headers['anthropic-beta']}")
+            
+            # Remove thinking blocks since thinking is disabled
+            body_json = fix_thinking_blocks(body_json, has_thinking_beta=False, use_real_anthropic=True)
+            request_body = json.dumps(body_json).encode('utf-8')
+        
+        # Make the request
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+            stream = body_json.get("stream", False)
+            
+            if stream:
+                response = await client.post(target_url, headers=target_headers, content=request_body)
+                logger.info(f"[Proxy] Response status: {response.status_code}")
+                
+                if response.status_code != 200:
+                    error_text = ""
+                    async for chunk in response.aiter_bytes():
+                        error_text += chunk.decode('utf-8', errors='ignore')
+                        if len(error_text) > 500:
+                            break
+                    logger.error(f"[Proxy] Error: {error_text[:500]}")
+                
+                async def stream_response():
+                    async for chunk in response.aiter_bytes():
+                        yield chunk
+                
+                return StreamingResponse(
+                    stream_response(),
                     status_code=response.status_code,
-                    headers=dict(response.headers)
+                    headers=dict(response.headers),
+                    media_type="text/event-stream",
                 )
-
-            except httpx.ReadTimeout:
-                logger.error(f"[count_tokens Read Timeout] {original_model} (attempt {attempt + 1}/{MAX_RETRIES})")
-                if attempt < MAX_RETRIES - 1:
-                    retry_delay = calculate_retry_delay(attempt)
-                    logger.warning(f"[Retry] Retrying in {retry_delay:.2f}s...")
-                    await asyncio.sleep(retry_delay)
-                    continue
+            else:
+                response = await client.post(target_url, headers=target_headers, content=request_body)
+                logger.info(f"[Proxy] Response status: {response.status_code}")
+                
+                if response.status_code != 200:
+                    logger.error(f"[Proxy] Error: {response.text[:500]}")
+                    return JSONResponse(
+                        content=response.json(),
+                        status_code=response.status_code,
+                        headers=dict(response.headers),
+                    )
+                
+                # Strip thinking blocks from response for Real Anthropic OAuth
+                response_json = response.json()
+                if use_real_anthropic and response_json.get("content"):
+                    response_json["content"] = [
+                        block for block in response_json["content"]
+                        if not (isinstance(block, dict) and block.get("type") in ["thinking", "redacted_thinking"])
+                    ]
+                    logger.info(f"[Proxy] Stripped thinking blocks from response")
+                
                 return JSONResponse(
-                    status_code=504,
-                    content={"error": "Gateway timeout - provider did not respond in time"}
+                    content=response_json,
+                    status_code=response.status_code,
+                    headers=dict(response.headers),
                 )
-
-            except httpx.ConnectTimeout:
-                logger.error(f"[count_tokens Connect Timeout] {original_model} (attempt {attempt + 1}/{MAX_RETRIES})")
-                if attempt < MAX_RETRIES - 1:
-                    retry_delay = calculate_retry_delay(attempt)
-                    logger.warning(f"[Retry] Retrying in {retry_delay:.2f}s...")
-                    await asyncio.sleep(retry_delay)
-                    continue
-                return JSONResponse(
-                    status_code=504,
-                    content={"error": "Gateway timeout - could not connect to provider"}
-                )
-
-            except Exception as e:
-                logger.error(f"[count_tokens Error] {original_model} (attempt {attempt + 1}/{MAX_RETRIES}): {type(e).__name__} - {e}")
-                if attempt < MAX_RETRIES - 1:
-                    retry_delay = calculate_retry_delay(attempt)
-                    logger.warning(f"[Retry] Retrying in {retry_delay:.2f}s...")
-                    await asyncio.sleep(retry_delay)
-                    continue
-                return JSONResponse(
-                    status_code=500,
-                    content={"error": f"Internal proxy error: {str(e)}"}
-                )
-
-        # Should not reach here
-        return JSONResponse(
-            status_code=500,
-            content={"error": "Max retries exceeded"}
-        )
+    
+    except Exception as e:
+        logger.error(f"[Proxy] Error: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
-@app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {
+async def messages_endpoint(request: Request):
+    return await proxy_request(request, "messages")
+
+
+async def count_tokens_endpoint(request: Request):
+    try:
+        body = await request.body()
+        body_json = json.loads(body) if body else {}
+        model = body_json.get("model", "claude-sonnet-4-5-20250929")
+        
+        api_key, base_url, tier = get_provider_config(model)
+        
+        if not api_key and not base_url:
+            return await proxy_request(request, "messages/count_tokens")
+        else:
+            return JSONResponse(content={"error": "Not supported"}, status_code=501)
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+async def health_check(request: Request):
+    return JSONResponse(content={
         "status": "healthy",
-        "haiku": {
-            "model": HAIKU_MODEL,
-            "provider_set": bool(HAIKU_BASE_URL),
-            "api_key_set": bool(HAIKU_API_KEY),
-        },
-        "opus": {
-            "model": OPUS_MODEL,
-            "provider_set": bool(OPUS_BASE_URL),
-            "api_key_set": bool(OPUS_API_KEY),
-        },
-        "sonnet": {
-            "model": SONNET_MODEL,
-            "provider_set": bool(SONNET_BASE_URL),
-            "api_key_set": bool(SONNET_API_KEY),
-            "uses_oauth": not bool(SONNET_BASE_URL),
-        },
-    }
+        "haiku": {"model": ANTHROPIC_DEFAULT_HAIKU_MODEL, "provider_set": bool(HAIKU_PROVIDER_BASE_URL)},
+        "sonnet": {"uses_oauth": not bool(SONNET_PROVIDER_API_KEY), "oauth_token_available": get_oauth_token() is not None},
+    })
 
+
+routes = [
+    Route("/v1/messages", messages_endpoint, methods=["POST"]),
+    Route("/v1/messages/count_tokens", count_tokens_endpoint, methods=["POST"]),
+    Route("/health", health_check, methods=["GET"]),
+]
+
+app = Starlette(debug=True, routes=routes)
 
 if __name__ == "__main__":
     import uvicorn
 
-    print("=" * 80)
-    print("  Custom Model Proxy for Claude Code - Multi-Provider Edition")
-    print("=" * 80)
-    print()
-    print(f"Port: {PORT}")
-    print()
-    print("Model Tier Configuration:")
-    print(f"  Haiku  → {HAIKU_MODEL}")
-    print(f"           Provider: {HAIKU_BASE_URL or 'Real Anthropic (OAuth)'}")
-    print(f"           API Key: {'✓ Set' if HAIKU_API_KEY else '✗ Not Set'}")
-    print()
-    print(f"  Opus   → {OPUS_MODEL}")
-    print(f"           Provider: {OPUS_BASE_URL or 'Real Anthropic (OAuth)'}")
-    print(f"           API Key: {'✓ Set' if OPUS_API_KEY else '✗ Not Set'}")
-    print()
-    print(f"  Sonnet → {SONNET_MODEL}")
-    print(f"           Provider: {SONNET_BASE_URL or 'Real Anthropic (OAuth)'}")
-    print(f"           API Key: {'✓ Set' if SONNET_API_KEY else '✗ Not Set'}")
-    print()
-    print("Routing Logic:")
-    print(f"  • {HAIKU_MODEL} → {'Custom Haiku Provider' if HAIKU_BASE_URL else 'Real Anthropic'}")
-    print(f"  • {OPUS_MODEL} → {'Custom Opus Provider' if OPUS_BASE_URL else 'Real Anthropic'}")
-    print(f"  • {SONNET_MODEL} → {'Custom Sonnet Provider' if SONNET_BASE_URL else 'Real Anthropic'}")
-    print()
-    print("Configure Claude Code:")
-    print("  export ANTHROPIC_DEFAULT_HAIKU_MODEL=glm-4.6")
-    print("  export ANTHROPIC_DEFAULT_OPUS_MODEL=glm-4.5-air")
-    print("  # export ANTHROPIC_DEFAULT_SONNET_MODEL=glm-4-plus  # Optional")
-    print(f"  export ANTHROPIC_BASE_URL=http://localhost:{PORT}")
-    print()
-    print(f"Starting proxy on http://localhost:{PORT}")
-    print("=" * 80)
+    logger.info("=" * 60)
+    logger.info("Claude Code Proxy - With Signature Support")
+    logger.info("=" * 60)
+    logger.info(f"Haiku: {ANTHROPIC_DEFAULT_HAIKU_MODEL} -> {'Z.AI' if HAIKU_PROVIDER_BASE_URL else 'Anthropic'}")
+    logger.info(f"Sonnet: -> {'API Key' if SONNET_PROVIDER_API_KEY else 'Anthropic OAuth'}")
+    oauth_token = get_oauth_token()
+    logger.info(f"OAuth: {'Available (OK)' if oauth_token else 'NOT FOUND'}")
+    logger.info("=" * 60)
 
-    uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="info")
+    uvicorn.run(app, host="0.0.0.0", port=8082, log_level="info")
