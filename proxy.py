@@ -65,22 +65,33 @@ def get_oauth_token():
         logger.error(f"[OAuth] Failed to read credentials: {e}")
         return None
 
-def get_provider_config(model: str) -> Tuple[Optional[str], Optional[str], str]:
+def get_provider_config(model: str) -> Tuple[Optional[str], Optional[str], str, str]:
     """Determine which provider to use based on model name."""
-    if model == ANTHROPIC_DEFAULT_HAIKU_MODEL:
-        return HAIKU_PROVIDER_API_KEY, HAIKU_PROVIDER_BASE_URL, "Haiku"
-    if model == ANTHROPIC_DEFAULT_OPUS_MODEL:
-        return OPUS_PROVIDER_API_KEY, OPUS_PROVIDER_BASE_URL, "Opus"
+    # Handle short model names used by subagents
+    if model.lower() == "haiku":
+        model = ANTHROPIC_DEFAULT_HAIKU_MODEL
+        logger.info(f"[Proxy] Translating 'haiku' → '{model}'")
+    elif model.lower() == "opus":
+        model = ANTHROPIC_DEFAULT_OPUS_MODEL
+        logger.info(f"[Proxy] Translating 'opus' → '{model}'")
     
+    # Check which provider to use
+    if model == ANTHROPIC_DEFAULT_HAIKU_MODEL:
+        return HAIKU_PROVIDER_API_KEY, HAIKU_PROVIDER_BASE_URL, "Haiku", model
+    if model == ANTHROPIC_DEFAULT_OPUS_MODEL:
+        return OPUS_PROVIDER_API_KEY, OPUS_PROVIDER_BASE_URL, "Opus", model
+    
+    # Check by tier name in model string
     model_lower = model.lower()
     if "sonnet" in model_lower:
-        return SONNET_PROVIDER_API_KEY, SONNET_PROVIDER_BASE_URL, "Sonnet"
-    if "opus" in model_lower and not OPUS_PROVIDER_BASE_URL:
-        return SONNET_PROVIDER_API_KEY, SONNET_PROVIDER_BASE_URL, "Opus"
-    if "haiku" in model_lower and not HAIKU_PROVIDER_BASE_URL:
-        return SONNET_PROVIDER_API_KEY, SONNET_PROVIDER_BASE_URL, "Haiku"
+        return SONNET_PROVIDER_API_KEY, SONNET_PROVIDER_BASE_URL, "Sonnet", model
+    if "opus" in model_lower:
+        return OPUS_PROVIDER_API_KEY, OPUS_PROVIDER_BASE_URL, "Opus", model
+    if "haiku" in model_lower:
+        return HAIKU_PROVIDER_API_KEY, HAIKU_PROVIDER_BASE_URL, "Haiku", model
     
-    return SONNET_PROVIDER_API_KEY, SONNET_PROVIDER_BASE_URL, "Sonnet"
+    # Default
+    return None, None, "Unknown", model
 
 def generate_signature(thinking_content: str) -> str:
     """Generate a valid signature for thinking block."""
@@ -109,11 +120,15 @@ async def proxy_request(request: Request, endpoint: str) -> JSONResponse | Strea
     try:
         body = await request.body()
         body_json = json.loads(body) if body else {}
-        model = body_json.get("model", "claude-sonnet-4-5-20250929")
+        original_model = body_json.get("model", "claude-sonnet-4-5-20250929")
         
-        logger.info(f"[Proxy] Incoming request for model: {model}")
+        logger.info(f"[Proxy] Incoming request for model: {original_model}")
         
-        api_key, base_url, tier = get_provider_config(model)
+        api_key, base_url, tier, translated_model = get_provider_config(original_model)
+        
+        # Update the model in the request body with translated name
+        body_json["model"] = translated_model
+        
         original_headers = dict(request.headers)
         use_real_anthropic = False  # Track if using Real Anthropic OAuth
         
@@ -130,8 +145,8 @@ async def proxy_request(request: Request, endpoint: str) -> JSONResponse | Strea
                 if header in original_headers:
                     target_headers[header] = original_headers[header]
             
-            request_body = body
-            logger.info(f"[Proxy] {model} → {tier} Provider (API Key)")
+            request_body = json.dumps(body_json).encode('utf-8')
+            logger.info(f"[Proxy] {original_model} → {tier} Provider (API Key) using model: {translated_model}")
             
         else:
             # Real Anthropic with OAuth
@@ -143,7 +158,7 @@ async def proxy_request(request: Request, endpoint: str) -> JSONResponse | Strea
             oauth_token = get_oauth_token()
             if oauth_token:
                 target_headers["Authorization"] = f"Bearer {oauth_token}"
-                logger.info(f"[Proxy] {model} → Real Anthropic (OAuth)")
+                logger.info(f"[Proxy] {original_model} → Real Anthropic (OAuth) using model: {translated_model}")
             else:
                 for k, v in original_headers.items():
                     if k.lower() == "authorization":
@@ -231,9 +246,12 @@ async def count_tokens_endpoint(request: Request):
     try:
         body = await request.body()
         body_json = json.loads(body) if body else {}
-        model = body_json.get("model", "claude-sonnet-4-5-20250929")
+        original_model = body_json.get("model", "claude-sonnet-4-5-20250929")
         
-        api_key, base_url, tier = get_provider_config(model)
+        api_key, base_url, tier, translated_model = get_provider_config(original_model)
+        
+        # Update the model in the request body
+        body_json["model"] = translated_model
         
         if not api_key and not base_url:
             return await proxy_request(request, "messages/count_tokens")
