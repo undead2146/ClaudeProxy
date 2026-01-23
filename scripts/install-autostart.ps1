@@ -101,8 +101,9 @@ Write-Host ""
 # Build PowerShell command to run
 # This command will:
 # 1. Load environment variables from .env
-# 2. Start Python proxy
-# 3. Redirect output to log file
+# 2. Start Antigravity server
+# 3. Start Python proxy
+# 4. Redirect output to log file
 $command = @"
 # Load environment variables from .env file
 if (Test-Path '$EnvFile') {
@@ -115,9 +116,18 @@ if (Test-Path '$EnvFile') {
     }
 }
 
-# Start proxy and redirect output to log
-  [Environment]::SetEnvironmentVariable('CLAUDE_PROXY_LOG_FILE', '$LogFile', 'Process')
-  python -u '$ProxyScript'
+# Start Antigravity server first
+Write-Host '[Startup] Starting Antigravity server on port 8081...'
+`$env:PORT = '8081'
+Start-Process powershell -ArgumentList '-NoExit', '-Command', '`$env:PORT=8081; antigravity-claude-proxy start' -WindowStyle Minimized
+
+# Wait for Antigravity to start
+Start-Sleep -Seconds 5
+
+# Start main proxy and redirect output to log
+Write-Host '[Startup] Starting main proxy server...'
+[Environment]::SetEnvironmentVariable('CLAUDE_PROXY_LOG_FILE', '$LogFile', 'Process')
+python -u '$ProxyScript'
 "@
 
 # Create the scheduled task action
