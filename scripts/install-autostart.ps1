@@ -118,6 +118,7 @@ if (Test-Path '$EnvFile') {
 # Start proxy and redirect output to log
   [Environment]::SetEnvironmentVariable('CLAUDE_PROXY_LOG_FILE', '$LogFile', 'Process')
   python -u '$ProxyScript'
+"@
 
 # Create the scheduled task action
 $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command `"$command`""
