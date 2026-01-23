@@ -1,9 +1,9 @@
 {
-  "sonnet_provider": "antigravity",
+  "sonnet_provider": "glm",
   "haiku_provider": "glm",
-  "opus_provider": "antigravity",
-  "sonnet_model": "gemini-3-pro-high[1m]",
+  "opus_provider": "copilot",
+  "sonnet_model": "glm-4.7",
   "haiku_model": "glm-4.7",
-  "opus_model": "gemini-3-pro-high[1m]",
-  "last_updated": "2026-01-23T18:34:22.675660"
+  "opus_model": "claude-opus-4.5",
+  "last_updated": "2026-01-23T20:51:39.349996"
 }

@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Claude Code Proxy - Unified Router for GLM and Antigravity (Gemini)
 """
@@ -127,12 +127,12 @@ ANTIGRAVITY_SONNET_MODEL = os.getenv("ANTIGRAVITY_SONNET_MODEL", "gemini-3-pro-h
 ANTIGRAVITY_HAIKU_MODEL = os.getenv("ANTIGRAVITY_HAIKU_MODEL", "gemini-3-flash[1m]")
 ANTIGRAVITY_OPUS_MODEL = os.getenv("ANTIGRAVITY_OPUS_MODEL", "gemini-3-pro-high[1m]")
 
-# GitHub Copilot/Models configuration
-GITHUB_COPILOT_API_KEY = os.getenv("GITHUB_COPILOT_API_KEY")
-GITHUB_COPILOT_BASE_URL = os.getenv("GITHUB_COPILOT_BASE_URL", "https://api.githubcopilot.com")
-GITHUB_COPILOT_SONNET_MODEL = os.getenv("GITHUB_COPILOT_SONNET_MODEL", "claude-sonnet-4")
-GITHUB_COPILOT_HAIKU_MODEL = os.getenv("GITHUB_COPILOT_HAIKU_MODEL", "claude-3-5-haiku")
-GITHUB_COPILOT_OPUS_MODEL = os.getenv("GITHUB_COPILOT_OPUS_MODEL", "claude-opus-4")
+# GitHub Copilot configuration (via copilot-api proxy)
+ENABLE_COPILOT = os.getenv("ENABLE_COPILOT", "false").lower() == "true"
+GITHUB_COPILOT_BASE_URL = os.getenv("GITHUB_COPILOT_BASE_URL", "http://localhost:4141")
+GITHUB_COPILOT_SONNET_MODEL = os.getenv("GITHUB_COPILOT_SONNET_MODEL", "claude-sonnet-4.5")
+GITHUB_COPILOT_HAIKU_MODEL = os.getenv("GITHUB_COPILOT_HAIKU_MODEL", "claude-haiku-4.5")
+GITHUB_COPILOT_OPUS_MODEL = os.getenv("GITHUB_COPILOT_OPUS_MODEL", "claude-opus-4.5")
 
 ANTHROPIC_BASE_URL = "https://api.anthropic.com"
 REQUEST_TIMEOUT = 300.0
@@ -211,48 +211,48 @@ def get_provider_config(model: str) -> Tuple[Optional[str], Optional[str], str, 
     # Route based on configured provider for this tier
     if tier == "Sonnet":
         if current_sonnet_provider == "antigravity" and ANTIGRAVITY_ENABLED:
-            logger.info(f"[Proxy] Routing Sonnet â†’ Antigravity ({sonnet_model})")
+            logger.info(f"[Proxy] Routing Sonnet → Antigravity ({sonnet_model})")
             return None, ANTIGRAVITY_BASE_URL, tier, sonnet_model, "antigravity"
         elif current_sonnet_provider == "glm" and GLM_SONNET_MODEL and SONNET_PROVIDER_BASE_URL:
-            logger.info(f"[Proxy] Routing Sonnet â†’ GLM ({GLM_SONNET_MODEL})")
+            logger.info(f"[Proxy] Routing Sonnet → GLM ({GLM_SONNET_MODEL})")
             return SONNET_PROVIDER_API_KEY, SONNET_PROVIDER_BASE_URL, tier, GLM_SONNET_MODEL, "glm"
-        elif current_sonnet_provider == "copilot" and GITHUB_COPILOT_API_KEY:
-            logger.info(f"[Proxy] Routing Sonnet â†’ GitHub Copilot ({GITHUB_COPILOT_SONNET_MODEL})")
-            return GITHUB_COPILOT_API_KEY, GITHUB_COPILOT_BASE_URL, tier, GITHUB_COPILOT_SONNET_MODEL, "copilot"
+        elif current_sonnet_provider == "copilot" and ENABLE_COPILOT:
+            logger.info(f"[Proxy] Routing Sonnet → GitHub Copilot ({sonnet_model})")
+            return None, GITHUB_COPILOT_BASE_URL, tier, sonnet_model, "copilot"
         else:
-            logger.info(f"[Proxy] Routing Sonnet â†’ Anthropic (OAuth)")
+            logger.info(f"[Proxy] Routing Sonnet → Anthropic (OAuth)")
             # For Anthropic, use a real Claude model name
             real_model = "claude-sonnet-4-5-20250929" if "glm" in model_lower or "gemini" in model_lower else model
             return None, None, tier, real_model, "anthropic"
     
     elif tier == "Haiku":
         if current_haiku_provider == "antigravity" and ANTIGRAVITY_ENABLED:
-            logger.info(f"[Proxy] Routing Haiku â†’ Antigravity ({haiku_model})")
+            logger.info(f"[Proxy] Routing Haiku → Antigravity ({haiku_model})")
             return None, ANTIGRAVITY_BASE_URL, tier, haiku_model, "antigravity"
         elif current_haiku_provider == "glm" and GLM_HAIKU_MODEL and HAIKU_PROVIDER_BASE_URL:
-            logger.info(f"[Proxy] Routing Haiku â†’ GLM ({GLM_HAIKU_MODEL})")
+            logger.info(f"[Proxy] Routing Haiku → GLM ({GLM_HAIKU_MODEL})")
             return HAIKU_PROVIDER_API_KEY, HAIKU_PROVIDER_BASE_URL, tier, GLM_HAIKU_MODEL, "glm"
-        elif current_haiku_provider == "copilot" and GITHUB_COPILOT_API_KEY:
-            logger.info(f"[Proxy] Routing Haiku â†’ GitHub Copilot ({GITHUB_COPILOT_HAIKU_MODEL})")
-            return GITHUB_COPILOT_API_KEY, GITHUB_COPILOT_BASE_URL, tier, GITHUB_COPILOT_HAIKU_MODEL, "copilot"
+        elif current_haiku_provider == "copilot" and ENABLE_COPILOT:
+            logger.info(f"[Proxy] Routing Haiku → GitHub Copilot ({haiku_model})")
+            return None, GITHUB_COPILOT_BASE_URL, tier, haiku_model, "copilot"
         else:
-            logger.info(f"[Proxy] Routing Haiku â†’ Anthropic (OAuth)")
+            logger.info(f"[Proxy] Routing Haiku → Anthropic (OAuth)")
             # For Anthropic, use a real Claude model name
             real_model = "claude-3-5-haiku-20241022" if "glm" in model_lower or "gemini" in model_lower else model
             return None, None, tier, real_model, "anthropic"
     
     elif tier == "Opus":
         if current_opus_provider == "antigravity" and ANTIGRAVITY_ENABLED:
-            logger.info(f"[Proxy] Routing Opus â†’ Antigravity ({opus_model})")
+            logger.info(f"[Proxy] Routing Opus → Antigravity ({opus_model})")
             return None, ANTIGRAVITY_BASE_URL, tier, opus_model, "antigravity"
         elif current_opus_provider == "glm" and GLM_OPUS_MODEL and OPUS_PROVIDER_BASE_URL:
-            logger.info(f"[Proxy] Routing Opus â†’ GLM ({GLM_OPUS_MODEL})")
+            logger.info(f"[Proxy] Routing Opus → GLM ({GLM_OPUS_MODEL})")
             return OPUS_PROVIDER_API_KEY, OPUS_PROVIDER_BASE_URL, tier, GLM_OPUS_MODEL, "glm"
-        elif current_opus_provider == "copilot" and GITHUB_COPILOT_API_KEY:
-            logger.info(f"[Proxy] Routing Opus â†’ GitHub Copilot ({GITHUB_COPILOT_OPUS_MODEL})")
-            return GITHUB_COPILOT_API_KEY, GITHUB_COPILOT_BASE_URL, tier, GITHUB_COPILOT_OPUS_MODEL, "copilot"
+        elif current_opus_provider == "copilot" and ENABLE_COPILOT:
+            logger.info(f"[Proxy] Routing Opus ? GitHub Copilot ({GITHUB_COPILOT_OPUS_MODEL})")
+            return None, GITHUB_COPILOT_BASE_URL, tier, GITHUB_COPILOT_OPUS_MODEL, "copilot"
         else:
-            logger.info(f"[Proxy] Routing Opus â†’ Anthropic (OAuth)")
+            logger.info(f"[Proxy] Routing Opus → Anthropic (OAuth)")
             # For Anthropic, use a real Claude model name
             real_model = "claude-opus-4-20250514" if "glm" in model_lower or "gemini" in model_lower else model
             return None, None, tier, real_model, "anthropic"
@@ -265,8 +265,8 @@ def get_provider_config(model: str) -> Tuple[Optional[str], Optional[str], str, 
         return None, ANTIGRAVITY_BASE_URL, "Haiku", ANTIGRAVITY_HAIKU_MODEL, "antigravity"
     elif current_haiku_provider == "glm" and GLM_HAIKU_MODEL and HAIKU_PROVIDER_BASE_URL:
         return HAIKU_PROVIDER_API_KEY, HAIKU_PROVIDER_BASE_URL, "Haiku", GLM_HAIKU_MODEL, "glm"
-    elif current_haiku_provider == "copilot" and GITHUB_COPILOT_API_KEY:
-        return GITHUB_COPILOT_API_KEY, GITHUB_COPILOT_BASE_URL, "Haiku", GITHUB_COPILOT_HAIKU_MODEL, "copilot"
+    elif current_haiku_provider == "copilot" and ENABLE_COPILOT:
+        return None, GITHUB_COPILOT_BASE_URL, "Haiku", haiku_model, "copilot"
     else:
         return None, None, "Unknown", "claude-3-5-haiku-20241022", "anthropic"
 
@@ -383,6 +383,70 @@ async def proxy_to_antigravity(body_json: dict, original_headers: dict, endpoint
         }, status_code=504)
     except Exception as e:
         logger.error(f"[Antigravity] Error: {type(e).__name__}: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+async def proxy_to_copilot(body_json: dict, original_headers: dict, endpoint: str) -> JSONResponse | StreamingResponse:
+    """Proxy request to GitHub Copilot API."""
+    try:
+        target_url = f"{GITHUB_COPILOT_BASE_URL}/v1/{endpoint}"
+        target_headers = {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer dummy"  # copilot-api handles auth internally
+        }
+        
+        # Copy Anthropic headers
+        for header in ["anthropic-version", "anthropic-beta"]:
+            if header in original_headers:
+                target_headers[header] = original_headers[header]
+        
+        logger.info(f"[Copilot] Sending to {target_url}")
+        logger.info(f"[Copilot] Model: {body_json.get('model')}")
+        
+        request_body = json.dumps(body_json).encode('utf-8')
+        
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+            stream = body_json.get("stream", False)
+            
+            if stream:
+                response = await client.post(target_url, headers=target_headers, content=request_body)
+                logger.info(f"[Copilot] Response status: {response.status_code}")
+                
+                async def stream_response():
+                    async for chunk in response.aiter_bytes():
+                        yield chunk
+                
+                return StreamingResponse(
+                    stream_response(),
+                    status_code=response.status_code,
+                    headers=dict(response.headers),
+                    media_type="text/event-stream",
+                )
+            else:
+                response = await client.post(target_url, headers=target_headers, content=request_body)
+                logger.info(f"[Copilot] Response status: {response.status_code}")
+                
+                if response.status_code != 200:
+                    logger.error(f"[Copilot] Error: {response.text[:500]}")
+                    return JSONResponse(
+                        content=response.json(),
+                        status_code=response.status_code,
+                        headers=dict(response.headers),
+                    )
+                
+                return JSONResponse(
+                    content=response.json(),
+                    status_code=response.status_code,
+                    headers=dict(response.headers),
+                )
+    
+    except httpx.TimeoutException:
+        logger.error(f"[Copilot] Timeout after {REQUEST_TIMEOUT}s")
+        return JSONResponse(content={
+            "error": "GitHub Copilot API timeout"
+        }, status_code=504)
+    except Exception as e:
+        logger.error(f"[Copilot] Error: {type(e).__name__}: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
@@ -530,8 +594,13 @@ async def proxy_request(request: Request, endpoint: str) -> JSONResponse | Strea
         
         # Route to Antigravity
         if provider_type == "antigravity":
-            logger.info(f"[Proxy] {original_model} â†’ Antigravity ({translated_model})")
+            logger.info(f"[Proxy] {original_model} → Antigravity ({translated_model})")
             return await proxy_to_antigravity(body_json, original_headers, endpoint)
+        
+        # Route to GitHub Copilot (via copilot-api proxy)
+        elif provider_type == "copilot":
+            logger.info(f"[Proxy] {original_model} → GitHub Copilot ({translated_model})")
+            return await proxy_to_copilot(body_json, original_headers, endpoint)
         
         # Route to GLM provider
         elif api_key and base_url and provider_type == "glm":
@@ -547,7 +616,7 @@ async def proxy_request(request: Request, endpoint: str) -> JSONResponse | Strea
                     target_headers[header] = original_headers[header]
             
             request_body = json.dumps(body_json).encode('utf-8')
-            logger.info(f"[Proxy] {original_model} â†’ {tier} Provider (API Key) using model: {translated_model}")
+            logger.info(f"[Proxy] {original_model} → {tier} Provider (API Key) using model: {translated_model}")
             
         else:
             # Real Anthropic with OAuth
@@ -559,7 +628,7 @@ async def proxy_request(request: Request, endpoint: str) -> JSONResponse | Strea
             oauth_token = get_oauth_token()
             if oauth_token:
                 target_headers["Authorization"] = f"Bearer {oauth_token}"
-                logger.info(f"[Proxy] {original_model} â†’ Real Anthropic (OAuth) using model: {translated_model}")
+                logger.info(f"[Proxy] {original_model} → Real Anthropic (OAuth) using model: {translated_model}")
             else:
                 for k, v in original_headers.items():
                     if k.lower() == "authorization":
@@ -737,7 +806,7 @@ async def get_config_endpoint(request: Request):
         "antigravity": ANTIGRAVITY_ENABLED,
         "glm": bool(GLM_HAIKU_MODEL or GLM_SONNET_MODEL or GLM_OPUS_MODEL),
         "anthropic": get_oauth_token() is not None,
-        "copilot": bool(GITHUB_COPILOT_API_KEY)
+        "copilot": ENABLE_COPILOT
     }
     
     # Available models per provider
@@ -765,9 +834,19 @@ async def get_config_endpoint(request: Request):
             "claude-opus-4-20250514"
         ],
         "copilot": [
-            "claude-sonnet-4",
-            "claude-3-5-haiku",
-            "claude-opus-4"
+            "gpt-4.1",
+            "gpt-5-mini",
+            "grok-code-fast-1",
+            "raptor-mini",
+            "claude-haiku-4.5",
+            "claude-sonnet-4.5",
+            "claude-opus-4.5",
+            "gemini-3-flash-preview",
+            "gemini-3-pro-preview",
+            "gemini-2.5-pro",
+            "gpt-5.1-codex-max",
+            "gpt-5.1-codex-mini",
+            "gpt-5.2-codex"
         ]
     }
     
@@ -853,6 +932,17 @@ async def logs_page_endpoint(request: Request):
         return HTMLResponse(content="<html><body><h1>Logs page not found</h1></body></html>", status_code=404)
 
 
+async def usage_page_endpoint(request: Request):
+    """Serve dedicated usage statistics page."""
+    usage_html_path = os.path.join(os.path.dirname(__file__), 'usage.html')
+    if os.path.exists(usage_html_path):
+        with open(usage_html_path, 'r', encoding='utf-8') as f:
+            html = f.read()
+        return HTMLResponse(content=html)
+    else:
+        return HTMLResponse(content="<html><body><h1>Usage page not found</h1></body></html>", status_code=404)
+
+
 async def test_antigravity_endpoint(request: Request):
     """Test Antigravity with a minimal request."""
     try:
@@ -895,6 +985,7 @@ routes = [
     Route("/logs", get_logs_endpoint, methods=["GET"]),
     Route("/logs/clear", clear_logs_endpoint, methods=["POST"]),
     Route("/logs.html", logs_page_endpoint, methods=["GET"]),
+    Route("/usage", usage_page_endpoint, methods=["GET"]),
     Route("/test-antigravity", test_antigravity_endpoint, methods=["GET"]),
     Route("/dashboard", dashboard_endpoint, methods=["GET"]),
     Route("/", dashboard_endpoint, methods=["GET"]),
@@ -941,9 +1032,9 @@ if __name__ == "__main__":
             return "Anthropic (OAuth)"
     
     logger.info("Current Routing Configuration:")
-    logger.info(f"  Sonnet â†’ {get_model_display(get_sonnet_provider(), 'Sonnet')}")
-    logger.info(f"  Haiku  â†’ {get_model_display(get_haiku_provider(), 'Haiku')}")
-    logger.info(f"  Opus   â†’ {get_model_display(get_opus_provider(), 'Opus')}")
+    logger.info(f"  Sonnet → {get_model_display(get_sonnet_provider(), 'Sonnet')}")
+    logger.info(f"  Haiku  → {get_model_display(get_haiku_provider(), 'Haiku')}")
+    logger.info(f"  Opus   → {get_model_display(get_opus_provider(), 'Opus')}")
     
     if ANTIGRAVITY_ENABLED:
         logger.info("=" * 70)
@@ -957,7 +1048,7 @@ if __name__ == "__main__":
     oauth_token = get_oauth_token()
     current_providers = [get_sonnet_provider(), get_haiku_provider(), get_opus_provider()]
     if "anthropic" in current_providers:
-        logger.info(f"Anthropic OAuth: {'Available âœ“' if oauth_token else 'NOT FOUND âœ—'}")
+        logger.info(f"Anthropic OAuth: {'Available ✓' if oauth_token else 'NOT FOUND ✗'}")
     
     logger.info("=" * 70)
     logger.info("Proxy listening on http://0.0.0.0:8082")

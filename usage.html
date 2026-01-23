@@ -1,0 +1,312 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Usage Statistics - Claude Code Proxy</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { 
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+    background: #0d1117; 
+    color: #c9d1d9;
+    padding: 20px; 
+}
+.container { max-width: 1400px; margin: 0 auto; }
+.header { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    margin-bottom: 30px;
+    padding-bottom: 20px;
+    border-bottom: 2px solid #30363d;
+}
+h1 { 
+    color: #f0f6fc; 
+    font-size: 32px;
+    font-weight: 600;
+}
+.back-btn {
+    background: #21262d;
+    color: #f0f6fc;
+    border: 1px solid #30363d;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.back-btn:hover {
+    background: #30363d;
+    border-color: #58a6ff;
+}
+.card { 
+    background: #161b22; 
+    border: 1px solid #30363d;
+    border-radius: 8px; 
+    padding: 25px; 
+    margin-bottom: 20px;
+}
+.usage-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+}
+.usage-card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 20px;
+}
+.usage-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+.usage-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #f0f6fc;
+}
+.usage-badge {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+.usage-badge.active {
+    background: rgba(63, 185, 80, 0.2);
+    color: #3fb950;
+}
+.usage-badge.inactive {
+    background: rgba(139, 148, 158, 0.2);
+    color: #8b949e;
+}
+.stat-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid #21262d;
+}
+.stat-row:last-child {
+    border-bottom: none;
+}
+.stat-label {
+    color: #8b949e;
+    font-size: 14px;
+}
+.stat-value {
+    color: #f0f6fc;
+    font-weight: 600;
+    font-size: 14px;
+}
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background: #21262d;
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 15px 0;
+}
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #3fb950, #2ea043);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+.progress-fill.warning {
+    background: linear-gradient(90deg, #f0883e, #d67e3e);
+}
+.progress-fill.danger {
+    background: linear-gradient(90deg, #f85149, #d83933);
+}
+.quota-label {
+    font-size: 12px;
+    color: #8b949e;
+    margin-bottom: 5px;
+}
+.quota-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: #f0f6fc;
+    margin-bottom: 5px;
+}
+.quota-total {
+    font-size: 14px;
+    color: #8b949e;
+}
+.loading {
+    text-align: center;
+    padding: 40px;
+    color: #8b949e;
+}
+.error {
+    background: rgba(248, 81, 73, 0.1);
+    border: 1px solid #f85149;
+    color: #f85149;
+    padding: 15px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+}
+.empty-state {
+    text-align: center;
+    padding: 40px;
+    color: #8b949e;
+    font-style: italic;
+}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header">
+    <h1>📊 Usage Statistics</h1>
+    <a href="/dashboard" class="back-btn">
+        <span>←</span>
+        <span>Back to Dashboard</span>
+    </a>
+</div>
+
+<div id="content">
+    <div class="loading">Loading usage data...</div>
+</div>
+</div>
+
+<script>
+async function loadUsage() {
+    try {
+        const [copilotRes, antigravityRes] = await Promise.all([
+            fetch('http://localhost:4141/usage').catch(() => null),
+            fetch('http://localhost:8081/health').catch(() => null)
+        ]);
+
+        const content = document.getElementById('content');
+        let html = '<div class="usage-grid">';
+
+        // Copilot Usage
+        if (copilotRes && copilotRes.ok) {
+            const copilot = await copilotRes.json();
+            const premium = copilot.quota_snapshots.premium_interactions;
+            const remaining = Math.floor(premium.remaining);
+            const total = premium.entitlement;
+            const used = total - remaining;
+            const percent = premium.percent_remaining;
+            
+            let progressClass = '';
+            if (percent < 20) progressClass = 'danger';
+            else if (percent < 50) progressClass = 'warning';
+
+            html += `
+            <div class="usage-card">
+                <div class="usage-header">
+                    <div class="usage-title">🤖 GitHub Copilot</div>
+                    <div class="usage-badge active">Active</div>
+                </div>
+                
+                <div class="quota-label">Premium Interactions</div>
+                <div class="quota-value">${remaining}</div>
+                <div class="quota-total">of ${total} remaining</div>
+                
+                <div class="progress-bar">
+                    <div class="progress-fill ${progressClass}" style="width: ${percent}%"></div>
+                </div>
+                
+                <div class="stat-row">
+                    <span class="stat-label">Used</span>
+                    <span class="stat-value">${used} interactions</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Percentage Used</span>
+                    <span class="stat-value">${(100 - percent).toFixed(1)}%</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Reset Date</span>
+                    <span class="stat-value">${copilot.quota_reset_date}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Plan</span>
+                    <span class="stat-value">${copilot.copilot_plan}</span>
+                </div>
+            </div>`;
+        } else {
+            html += `
+            <div class="usage-card">
+                <div class="usage-header">
+                    <div class="usage-title">🤖 GitHub Copilot</div>
+                    <div class="usage-badge inactive">Offline</div>
+                </div>
+                <div class="empty-state">Copilot API not responding</div>
+            </div>`;
+        }
+
+        // Antigravity Usage
+        if (antigravityRes && antigravityRes.ok) {
+            html += `
+            <div class="usage-card">
+                <div class="usage-header">
+                    <div class="usage-title">🌌 Antigravity</div>
+                    <div class="usage-badge active">Active</div>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Status</span>
+                    <span class="stat-value">Operational</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Type</span>
+                    <span class="stat-value">Unlimited (Google Accounts)</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Port</span>
+                    <span class="stat-value">8081</span>
+                </div>
+            </div>`;
+        } else {
+            html += `
+            <div class="usage-card">
+                <div class="usage-header">
+                    <div class="usage-title">🌌 Antigravity</div>
+                    <div class="usage-badge inactive">Offline</div>
+                </div>
+                <div class="empty-state">Antigravity not responding</div>
+            </div>`;
+        }
+
+        // Anthropic Usage
+        html += `
+        <div class="usage-card">
+            <div class="usage-header">
+                <div class="usage-title">🧠 Anthropic</div>
+                <div class="usage-badge active">Active</div>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Type</span>
+                <span class="stat-value">Official API</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Authentication</span>
+                <span class="stat-value">OAuth Token</span>
+            </div>
+            <div class="empty-state" style="margin-top: 15px;">Usage tracked by Anthropic directly</div>
+        </div>`;
+
+        html += '</div>';
+        content.innerHTML = html;
+
+    } catch (error) {
+        document.getElementById('content').innerHTML = `
+            <div class="error">Failed to load usage data: ${error.message}</div>
+        `;
+    }
+}
+
+loadUsage();
+setInterval(loadUsage, 30000);
+</script>
+</body>
+</html>

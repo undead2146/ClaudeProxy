@@ -1,17 +1,18 @@
 ﻿<#
 .SYNOPSIS
-    Manage Claude Code Proxy and Antigravity Server
+    Manage Claude Code Proxy, Antigravity Server, and GitHub Copilot API
 .PARAMETER Action
     start, stop, restart, status
 .DESCRIPTION
-    This script manages both the main proxy server and the Antigravity server.
-    Use 'start' to start both services, 'stop' to stop both, etc.
+    This script manages the main proxy server, Antigravity server, and GitHub Copilot API.
+    Use 'start' to start all services, 'stop' to stop all, etc.
 #>
 param([string]$Action = "status")
 
 $proxyRoot = $PSScriptRoot | Split-Path
 $pidFile = Join-Path $proxyRoot "logs\proxy.pid"
 $antigravityPidFile = Join-Path $proxyRoot "logs\antigravity.pid"
+$copilotPidFile = Join-Path $proxyRoot "logs\copilot.pid"
 
 function Start-Antigravity {
     # Check if already running
@@ -54,9 +55,50 @@ function Start-Antigravity {
     return $agProcess.Id
 }
 
+function Start-Copilot {
+    # Check if already running
+    if (Test-Path $copilotPidFile) {
+        $cpPid = Get-Content $copilotPidFile
+        if (Get-Process -Id $cpPid -ErrorAction SilentlyContinue) {
+            Write-Host "[Copilot] Already running (PID: $cpPid)" -ForegroundColor Yellow
+            return $cpPid
+        }
+    }
+    
+    Write-Host "[Copilot] Starting GitHub Copilot API on port 4141..." -ForegroundColor Cyan
+    
+    # Create log directory
+    $logDir = Join-Path $proxyRoot "logs"
+    if (!(Test-Path $logDir)) {
+        New-Item -ItemType Directory -Path $logDir | Out-Null
+    }
+    
+    # Start Copilot API
+    $cpProcess = Start-Process npx -ArgumentList "copilot-api@latest", "start", "--port", "4141" -WindowStyle Hidden -PassThru
+    $cpProcess.Id | Out-File $copilotPidFile
+    
+    # Wait for Copilot to be ready
+    Start-Sleep -Seconds 3
+    
+    # Verify it's responding
+    try {
+        $response = Invoke-WebRequest -Uri "http://localhost:4141/usage" -TimeoutSec 3 -UseBasicParsing
+        $usage = $response.Content | ConvertFrom-Json
+        $remaining = [math]::Floor($usage.quota_snapshots.premium_interactions.remaining)
+        $total = $usage.quota_snapshots.premium_interactions.entitlement
+        Write-Host "[Copilot] Started successfully (PID: $($cpProcess.Id))" -ForegroundColor Green
+        Write-Host "[Copilot] Premium Quota: $remaining / $total remaining" -ForegroundColor Cyan
+    } catch {
+        Write-Host "[Copilot] Started but not responding yet" -ForegroundColor Yellow
+    }
+    
+    return $cpProcess.Id
+}
+
 function Start-Proxy {
-    # First start Antigravity
+    # First start Antigravity and Copilot
     Start-Antigravity
+    Start-Copilot
     
     # Then start the main proxy
     if (Test-Path $pidFile) {
@@ -103,6 +145,27 @@ function Stop-Antigravity {
     Write-Host "[Antigravity] Stopped" -ForegroundColor Green
 }
 
+function Stop-Copilot {
+    if (!(Test-Path $copilotPidFile)) {
+        Write-Host "[Copilot] Not running" -ForegroundColor Yellow
+        return
+    }
+    
+    $cpPid = Get-Content $copilotPidFile
+    
+    # Stop the process
+    Stop-Process -Id $cpPid -Force -ErrorAction SilentlyContinue
+    
+    # Also kill any node processes on port 4141
+    $nodeProcesses = Get-NetTCPConnection -LocalPort 4141 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique
+    foreach ($nodePid in $nodeProcesses) {
+        Stop-Process -Id $nodePid -Force -ErrorAction SilentlyContinue
+    }
+    
+    Remove-Item $copilotPidFile -Force -ErrorAction SilentlyContinue
+    Write-Host "[Copilot] Stopped" -ForegroundColor Green
+}
+
 function Stop-Proxy {
     # Stop main proxy
     if (!(Test-Path $pidFile)) {
@@ -116,6 +179,9 @@ function Stop-Proxy {
     
     # Stop Antigravity
     Stop-Antigravity
+    
+    # Stop Copilot
+    Stop-Copilot
     
     Write-Host "" 
     Write-Host "All services stopped" -ForegroundColor Green
@@ -152,6 +218,47 @@ function Get-ProxyStatus {
             $response = Invoke-WebRequest -Uri "http://localhost:8081/health" -TimeoutSec 2 -UseBasicParsing
             Write-Host "  Health: OK" -ForegroundColor Green
             Write-Host "  Dashboard: http://localhost:8081" -ForegroundColor Cyan
+        } catch {
+            Write-Host "  Health: FAILED" -ForegroundColor Red
+        }
+    }
+    
+    # Check GitHub Copilot API
+    Write-Host "" 
+    Write-Host "[GitHub Copilot API]" -ForegroundColor Yellow
+    $cpRunning = $false
+    if (Test-Path $copilotPidFile) {
+        $cpPid = Get-Content $copilotPidFile
+        $cpProcess = Get-Process -Id $cpPid -ErrorAction SilentlyContinue
+        
+        if ($cpProcess) {
+            Write-Host "  Status: RUNNING" -ForegroundColor Green
+            Write-Host "  PID: $cpPid"
+            $cpRunning = $true
+        } else {
+            Write-Host "  Status: STOPPED (stale PID)" -ForegroundColor Red
+            Remove-Item $copilotPidFile -Force -ErrorAction SilentlyContinue
+        }
+    } else {
+        Write-Host "  Status: STOPPED" -ForegroundColor Red
+    }
+    
+    # Test Copilot health
+    if ($cpRunning) {
+        try {
+            $response = Invoke-WebRequest -Uri "http://localhost:4141/usage" -TimeoutSec 2 -UseBasicParsing
+            $usage = $response.Content | ConvertFrom-Json
+            Write-Host "  Health: OK" -ForegroundColor Green
+            
+            $premium = $usage.quota_snapshots.premium_interactions
+            $remaining = [math]::Floor($premium.remaining)
+            $total = $premium.entitlement
+            $used = $total - $remaining
+            $percent = [math]::Round($premium.percent_remaining, 1)
+            
+            Write-Host "  Premium Quota: $remaining / $total remaining ($percent%)" -ForegroundColor Cyan
+            Write-Host "  Used: $used interactions" -ForegroundColor Gray
+            Write-Host "  Reset Date: $($usage.quota_reset_date)" -ForegroundColor Gray
         } catch {
             Write-Host "  Health: FAILED" -ForegroundColor Red
         }

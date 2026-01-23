@@ -6,51 +6,200 @@
 <title>Claude Code Proxy Dashboard</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; padding: 20px; }
+body { 
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+    background: #0d1117; 
+    color: #c9d1d9;
+    padding: 20px; 
+}
 .container { max-width: 1400px; margin: 0 auto; }
-h1 { color: #333; margin-bottom: 30px; font-size: 28px; }
-.card { background: white; border-radius: 8px; padding: 25px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-h2 { font-size: 20px; color: #333; margin-bottom: 20px; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; }
-.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; }
-.status-item { padding: 15px; background: #f9f9f9; border-radius: 6px; border-left: 4px solid #ddd; }
-.status-item.available { border-left-color: #4CAF50; }
-.status-item.unavailable { border-left-color: #f44336; }
-.status-label { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
-.status-value { font-size: 16px; font-weight: 600; color: #333; }
-.tier-row { display: flex; align-items: center; gap: 15px; margin-bottom: 15px; flex-wrap: wrap; }
-.tier-label { font-weight: 600; min-width: 80px; color: #555; }
-select { padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 14px; min-width: 180px; background: white; cursor: pointer; transition: all 0.2s; }
-select:hover { border-color: #4CAF50; }
-select:focus { outline: none; border-color: #4CAF50; box-shadow: 0 0 0 3px rgba(76,175,80,0.1); }
-.arrow { color: #999; font-weight: bold; font-size: 18px; }
-button { background: #4CAF50; color: white; border: none; padding: 12px 24px; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; margin-top: 10px; }
-button:hover { background: #45a049; transform: translateY(-1px); box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
-button:active { transform: translateY(0); }
-button.secondary { background: #2196F3; margin-left: 10px; }
-button.danger { background: #f44336; }
-#message { margin-top: 15px; padding: 12px; border-radius: 6px; font-weight: 500; display: none; }
-#message.success { background: #e8f5e9; color: #2e7d32; display: block; }
-#message.error { background: #ffebee; color: #c62828; display: block; }
-.logs-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
-.logs-header h2 { margin: 0; border: none; padding: 0; }
-.log-controls { display: flex; gap: 10px; }
-#logs { background: #0d1117; color: #c9d1d9; padding: 20px; border-radius: 6px; font-family: "Consolas", "Monaco", monospace; font-size: 13px; line-height: 1.6; max-height: 500px; overflow-y: auto; border: 1px solid #30363d; }
-.log-entry { margin-bottom: 10px; padding: 10px; border-left: 3px solid #444; background: rgba(255,255,255,0.03); border-radius: 4px; }
-.log-time { color: #8b949e; font-weight: 600; margin-right: 10px; }
-.log-level { font-weight: bold; margin-right: 10px; padding: 2px 6px; border-radius: 3px; font-size: 11px; }
-.log-level.INFO { color: #58a6ff; background: rgba(88,166,255,0.15); }
-.log-level.WARNING { color: #f0883e; background: rgba(240,136,62,0.15); }
-.log-level.ERROR { color: #f85149; background: rgba(248,81,73,0.15); }
-.log-level.DEBUG { color: #a371f7; background: rgba(163,113,247,0.15); }
-.empty-state { text-align: center; color: #8b949e; padding: 40px; font-style: italic; }
+.header { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    margin-bottom: 30px;
+    padding-bottom: 20px;
+    border-bottom: 2px solid #30363d;
+}
+h1 { 
+    color: #f0f6fc; 
+    font-size: 32px;
+    font-weight: 600;
+}
+.nav-buttons {
+    display: flex;
+    gap: 10px;
+}
+.nav-btn {
+    background: #21262d;
+    color: #f0f6fc;
+    border: 1px solid #30363d;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.nav-btn:hover {
+    background: #30363d;
+    border-color: #58a6ff;
+    color: #58a6ff;
+}
+.card { 
+    background: #161b22; 
+    border: 1px solid #30363d;
+    border-radius: 8px; 
+    padding: 25px; 
+    margin-bottom: 20px;
+}
+h2 { 
+    font-size: 20px; 
+    color: #f0f6fc; 
+    margin-bottom: 20px; 
+    border-bottom: 2px solid #21262d; 
+    padding-bottom: 10px;
+    font-weight: 600;
+}
+.grid { 
+    display: grid; 
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); 
+    gap: 15px; 
+}
+.status-item { 
+    padding: 15px; 
+    background: #0d1117; 
+    border-radius: 6px; 
+    border-left: 4px solid #30363d;
+    border: 1px solid #30363d;
+}
+.status-item.available { 
+    border-left: 4px solid #3fb950;
+    background: rgba(63, 185, 80, 0.05);
+}
+.status-item.unavailable { 
+    border-left: 4px solid #f85149;
+    background: rgba(248, 81, 73, 0.05);
+}
+.status-label { 
+    font-size: 12px; 
+    color: #8b949e; 
+    text-transform: uppercase; 
+    letter-spacing: 0.5px; 
+    margin-bottom: 5px; 
+}
+.status-value { 
+    font-size: 16px; 
+    font-weight: 600; 
+    color: #f0f6fc; 
+}
+.tier-row { 
+    display: flex; 
+    align-items: center; 
+    gap: 15px; 
+    margin-bottom: 15px; 
+    flex-wrap: wrap; 
+}
+.tier-label { 
+    font-weight: 600; 
+    min-width: 80px; 
+    color: #f0f6fc; 
+}
+select { 
+    padding: 10px 15px; 
+    border: 1px solid #30363d; 
+    border-radius: 6px; 
+    font-size: 14px; 
+    min-width: 180px; 
+    background: #0d1117; 
+    color: #f0f6fc;
+    cursor: pointer; 
+    transition: all 0.2s; 
+}
+select:hover { 
+    border-color: #58a6ff; 
+}
+select:focus { 
+    outline: none; 
+    border-color: #58a6ff; 
+    box-shadow: 0 0 0 3px rgba(88,166,255,0.1); 
+}
+.arrow { 
+    color: #8b949e; 
+    font-weight: bold; 
+    font-size: 18px; 
+}
+button { 
+    background: #238636; 
+    color: #ffffff; 
+    border: 1px solid #2ea043;
+    padding: 12px 24px; 
+    border-radius: 6px; 
+    font-size: 14px; 
+    font-weight: 600; 
+    cursor: pointer; 
+    transition: all 0.2s; 
+    margin-top: 10px; 
+}
+button:hover { 
+    background: #2ea043;
+}
+button:active { 
+    transform: scale(0.98);
+}
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+#message { 
+    margin-top: 15px; 
+    padding: 12px; 
+    border-radius: 6px; 
+    font-weight: 500; 
+    display: none;
+    border: 1px solid;
+}
+#message.success { 
+    background: rgba(63, 185, 80, 0.1);
+    color: #3fb950;
+    border-color: #3fb950;
+    display: block; 
+}
+#message.error { 
+    background: rgba(248, 81, 73, 0.1);
+    color: #f85149;
+    border-color: #f85149;
+    display: block; 
+}
+.description {
+    color: #8b949e;
+    margin-bottom: 20px;
+    font-size: 14px;
+}
 </style>
 </head>
 <body>
 <div class="container">
-<h1>Claude Code Proxy Dashboard</h1>
+<div class="header">
+    <h1>🚀 Claude Code Proxy</h1>
+    <div class="nav-buttons">
+        <a href="/usage" class="nav-btn">
+            <span>📊</span>
+            <span>Usage Stats</span>
+        </a>
+        <a href="/logs.html" class="nav-btn">
+            <span>📋</span>
+            <span>View Logs</span>
+        </a>
+    </div>
+</div>
 
 <div class="card">
-<h2>Provider Availability</h2>
+<h2>Provider Status</h2>
 <div class="grid" id="providerStatus">
 <div class="status-item"><div class="status-label">Loading...</div></div>
 </div>
@@ -58,7 +207,7 @@ button.danger { background: #f44336; }
 
 <div class="card">
 <h2>Routing Configuration</h2>
-<p style="color: #666; margin-bottom: 20px;">Select provider and model for each tier. Changes apply immediately without restart.</p>
+<p class="description">Select provider and model for each tier. Changes apply immediately without restart.</p>
 
 <div class="tier-row">
 <span class="tier-label">Sonnet</span>
@@ -98,12 +247,6 @@ button.danger { background: #f44336; }
 
 <button onclick="applyConfig()">Apply Changes</button>
 <div id="message"></div>
-</div>
-
-<div class="card">
-<h2>Logs</h2>
-<p style="margin: 10px 0; color: #8b949e;">View logs on a separate page for better readability</p>
-<button onclick="window.location.href='/logs.html'" style="width: 100%;">Open Logs Page</button>
 </div>
 </div>
 
