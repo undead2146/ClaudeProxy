@@ -1,364 +1,741 @@
-﻿<!DOCTYPE html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Claude Code Proxy Dashboard</title>
-<style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { 
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
-    background: #0d1117; 
-    color: #c9d1d9;
-    padding: 20px; 
-}
-.container { max-width: 1400px; margin: 0 auto; }
-.header { 
-    display: flex; 
-    justify-content: space-between; 
-    align-items: center; 
-    margin-bottom: 30px;
-    padding-bottom: 20px;
-    border-bottom: 2px solid #30363d;
-}
-h1 { 
-    color: #f0f6fc; 
-    font-size: 32px;
-    font-weight: 600;
-}
-.nav-buttons {
-    display: flex;
-    gap: 10px;
-}
-.nav-btn {
-    background: #21262d;
-    color: #f0f6fc;
-    border: 1px solid #30363d;
-    padding: 10px 20px;
-    border-radius: 6px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-}
-.nav-btn:hover {
-    background: #30363d;
-    border-color: #58a6ff;
-    color: #58a6ff;
-}
-.card { 
-    background: #161b22; 
-    border: 1px solid #30363d;
-    border-radius: 8px; 
-    padding: 25px; 
-    margin-bottom: 20px;
-}
-h2 { 
-    font-size: 20px; 
-    color: #f0f6fc; 
-    margin-bottom: 20px; 
-    border-bottom: 2px solid #21262d; 
-    padding-bottom: 10px;
-    font-weight: 600;
-}
-.grid { 
-    display: grid; 
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); 
-    gap: 15px; 
-}
-.status-item { 
-    padding: 15px; 
-    background: #0d1117; 
-    border-radius: 6px; 
-    border-left: 4px solid #30363d;
-    border: 1px solid #30363d;
-}
-.status-item.available { 
-    border-left: 4px solid #3fb950;
-    background: rgba(63, 185, 80, 0.05);
-}
-.status-item.unavailable { 
-    border-left: 4px solid #f85149;
-    background: rgba(248, 81, 73, 0.05);
-}
-.status-label { 
-    font-size: 12px; 
-    color: #8b949e; 
-    text-transform: uppercase; 
-    letter-spacing: 0.5px; 
-    margin-bottom: 5px; 
-}
-.status-value { 
-    font-size: 16px; 
-    font-weight: 600; 
-    color: #f0f6fc; 
-}
-.tier-row { 
-    display: flex; 
-    align-items: center; 
-    gap: 15px; 
-    margin-bottom: 15px; 
-    flex-wrap: wrap; 
-}
-.tier-label { 
-    font-weight: 600; 
-    min-width: 80px; 
-    color: #f0f6fc; 
-}
-select { 
-    padding: 10px 15px; 
-    border: 1px solid #30363d; 
-    border-radius: 6px; 
-    font-size: 14px; 
-    min-width: 180px; 
-    background: #0d1117; 
-    color: #f0f6fc;
-    cursor: pointer; 
-    transition: all 0.2s; 
-}
-select:hover { 
-    border-color: #58a6ff; 
-}
-select:focus { 
-    outline: none; 
-    border-color: #58a6ff; 
-    box-shadow: 0 0 0 3px rgba(88,166,255,0.1); 
-}
-.arrow { 
-    color: #8b949e; 
-    font-weight: bold; 
-    font-size: 18px; 
-}
-button { 
-    background: #238636; 
-    color: #ffffff; 
-    border: 1px solid #2ea043;
-    padding: 12px 24px; 
-    border-radius: 6px; 
-    font-size: 14px; 
-    font-weight: 600; 
-    cursor: pointer; 
-    transition: all 0.2s; 
-    margin-top: 10px; 
-}
-button:hover { 
-    background: #2ea043;
-}
-button:active { 
-    transform: scale(0.98);
-}
-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-#message { 
-    margin-top: 15px; 
-    padding: 12px; 
-    border-radius: 6px; 
-    font-weight: 500; 
-    display: none;
-    border: 1px solid;
-}
-#message.success { 
-    background: rgba(63, 185, 80, 0.1);
-    color: #3fb950;
-    border-color: #3fb950;
-    display: block; 
-}
-#message.error { 
-    background: rgba(248, 81, 73, 0.1);
-    color: #f85149;
-    border-color: #f85149;
-    display: block; 
-}
-.description {
-    color: #8b949e;
-    margin-bottom: 20px;
-    font-size: 14px;
-}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claude Proxy // Reactor V3</title>
+    <style>
+        :root {
+            --bg: #050505;
+            --text: #e0e0e0;
+            --font: 'SF Mono', 'Segoe UI Mono', 'Roboto Mono', monospace;
+
+            --c-sonnet: #ff9e0b;
+            --c-haiku: #10b981;
+            --c-opus: #8b5cf6;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--font);
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* HEADER */
+        .hud-header {
+            position: absolute; top: 0; left: 0; width: 100%;
+            padding: 20px 40px; box-sizing: border-box;
+            display: flex; justify-content: space-between; align-items: center;
+            z-index: 100; pointer-events: none;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
+        }
+        .brand { font-size: 20px; font-weight: 700; color: #fff; letter-spacing: 2px; display: flex; align-items: center; gap: 10px; }
+        .links a { pointer-events: auto; color: #666; text-decoration: none; font-size: 12px; margin-left: 20px; transition: 0.2s; text-transform: uppercase; }
+        .links a:hover { color: #fff; }
+
+        .pulse-dot { width: 8px; height: 8px; background: #333; border-radius: 50%; box-shadow: 0 0 0 1px #333; transition: 0.3s; }
+        .pulse-dot.ok { background: #0f0; box-shadow: 0 0 10px #0f0; }
+
+        /* MAIN STAGE */
+        .stage {
+            flex: 1;
+            display: flex;
+            justify-content: space-evenly;
+            align-items: center;
+            width: 100%;
+            perspective: 1000px;
+        }
+
+        /* REACTOR COMPONENTS */
+        .reactor {
+            position: relative;
+            width: 40vw; height: 40vw;
+            max-width: 600px; max-height: 600px;
+            min-width: 400px; min-height: 400px;
+            display: flex; justify-content: center; align-items: center;
+        }
+
+        .reactor svg {
+            width: 100%; height: 100%;
+            overflow: visible;
+            filter: drop-shadow(0 0 20px rgba(0,0,0,0.5));
+        }
+
+        /* SVG PATH STYLES */
+        path { transition: all 0.2s cubic-bezier(0.1, 0.7, 0.1, 1); cursor: pointer; vector-effect: non-scaling-stroke; }
+
+        /* Layer 1: Core */
+        .layer-core { fill: #111; stroke: #333; stroke-width: 1px; }
+        .layer-core:hover { fill: #1a1a1a; }
+
+        /* Layer 2: Providers */
+        .layer-prov {
+            fill: #0a0a0a;
+            stroke: #222;
+            stroke-width: 1px;
+            transition: all 0.3s ease;
+        }
+
+        /* State classes applied directly to the path */
+        .layer-prov.hover { fill: #222; }
+        .layer-prov.active { fill: var(--theme); stroke: var(--theme); }
+        .layer-prov.dim { opacity: 0.2; fill: #000; }
+
+        /* When active but secondary (hovering another), keep it visible but distinct */
+        .layer-prov.selected-dormant { fill: #111; stroke: var(--theme); stroke-width: 2px; stroke-dasharray: 4 2; opacity: 1; }
+
+        /* Icons */
+        .prov-icon {
+            transition: all 0.3s ease;
+            pointer-events: none;
+            opacity: 0.8;
+        }
+        .prov-icon.dim { opacity: 0.1; }
+
+        /* Layer 3: Models */
+        .layer-model {
+            fill: #050505;
+            stroke: #222;
+            stroke-width: 1px;
+            opacity: 0;
+            transform-origin: center;
+            pointer-events: none;
+            transition: all 0.3s cubic-bezier(0.1, 0.7, 0.1, 1);
+        }
+        .layer-model.visible { opacity: 1; pointer-events: auto; }
+        .layer-model:hover { fill: var(--theme); opacity: 0.8; }
+        .layer-model.selected { fill: var(--theme); stroke: #fff; stroke-width: 1px; opacity: 1; }
+
+        /* TEXT / LABELS */
+        text { font-family: var(--font); pointer-events: none; text-anchor: middle; dominant-baseline: middle; fill: #aaa; font-size: 11px; font-weight: 600; }
+
+        .text-core-label { font-size: 18px; font-weight: 800; fill: #fff; letter-spacing: 1px; }
+        .text-core-sub { font-size: 11px; fill: var(--theme); letter-spacing: 1px; text-transform: uppercase; }
+
+        .text-model { fill: #888; font-size: 11px; transition: all 0.2s; font-weight: 500; }
+        .layer-model:hover .text-model { fill: #fff; font-weight: 700; font-size: 12px; }
+        .layer-model.selected .text-model { fill: #000; font-weight: 800; font-size: 12px; }
+
+        .layer-prov.active text { fill: #000; font-weight: bold; }
+
+        .btn-config {
+            margin-left: 10px;
+            background: #444;
+            border: none;
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+        .btn-config:hover { background: #555; }
+
+        /* Config Section */
+        #config-section {
+            font-family: var(--font);
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+        #config-section input {
+            transition: border-color 0.3s;
+        }
+        #config-section input:focus {
+            outline: none;
+            border-color: #555;
+        }
+        #config-section button {
+            transition: background-color 0.3s;
+        }
+        #config-section button:hover {
+            background: #555;
+        }
+
+        /* Action Bar */
+        .action-bar {
+            position: absolute; bottom: 40px; width: 100%; text-align: center; pointer-events: none;
+        }
+        .btn-apply {
+            background: #000; color: #444; border: 1px solid #333;
+            padding: 12px 30px; font-family: var(--font); font-size: 12px; letter-spacing: 2px;
+            pointer-events: auto; cursor: pointer; transition: 0.3s;
+        }
+        .btn-apply.ready { border-color: var(--c-haiku); color: var(--c-haiku); background: rgba(0,255,0,0.05); }
+        .btn-apply.ready:hover { background: var(--c-haiku); color: #000; box-shadow: 0 0 20px rgba(0,255,0,0.4); }
+
+    </style>
 </head>
 <body>
-<div class="container">
-<div class="header">
-    <h1>🚀 Claude Code Proxy</h1>
-    <div class="nav-buttons">
-        <a href="/usage" class="nav-btn">
-            <span>📊</span>
-            <span>Usage Stats</span>
-        </a>
-        <a href="/logs.html" class="nav-btn">
-            <span>📋</span>
-            <span>View Logs</span>
-        </a>
+
+    <!-- SVG ICONS DEFS -->
+    <svg style="display:none">
+        <defs>
+            <symbol id="icon-antigravity" viewBox="0 0 24 24">
+                <!-- A simple rocket/triangle shape for Antigravity -->
+                <path d="M12 2.5L2 20.5h20L12 2.5zm0 5l5 9h-10l5-9z"/>
+            </symbol>
+            <symbol id="icon-anthropic" viewBox="0 0 24 24">
+                <!-- Simplified Curl/Spiral -->
+                <path d="M12 4c4.41 0 8 3.59 8 8s-3.59 8-8 8c-1.5 0-2.9-.4-4.1-1.1l1.5-1.5c.8.4 1.7.6 2.6.6 3.31 0 6-2.69 6-6s-2.69-6-6-6-6 2.69-6 6c0 1.2.3 2.3.9 3.3l-1.5 1.5C4.5 15.6 4 13.9 4 12c0-4.41 3.59-8 8-8z"/>
+            </symbol>
+            <symbol id="icon-copilot" viewBox="0 0 24 24">
+                <!-- Github Logo style -->
+                <path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-1.98 1.02-2.65-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02 1.76-.5 3.64-.5 5.4 0 1.94-1.33 2.78-1.02 2.78-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.65 0 3.83-2.33 4.66-4.56 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0012 2z"/>
+            </symbol>
+            <symbol id="icon-zai" viewBox="0 0 24 24">
+                <path d="M4 4h16v4h-8l8 8v4H4v-4h8l-8-8z"/>
+            </symbol>
+            <symbol id="icon-openrouter" viewBox="0 0 24 24">
+                <path d="M12 2L2 7.5 12 13 22 7.5 12 2zm0 14L2 11v5.5L12 22l10-5.5V11L12 16z"/>
+            </symbol>
+            <symbol id="icon-custom" viewBox="0 0 24 24">
+                <path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.5.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.04.24.25.42.5.42h4c.25 0 .46-.18.5-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/>
+            </symbol>
+        </defs>
+    </svg>
+
+    <div class="hud-header">
+        <div class="brand">
+            <div class="pulse-dot" id="sys-status"></div>
+            CLAUDE_PROXY // V3
+        </div>
+        <div class="links">
+            <a href="/logs.html">Logs</a>
+            <a href="/usage">Metrics</a>
+        </div>
     </div>
-</div>
 
-<div class="card">
-<h2>Provider Status</h2>
-<div class="grid" id="providerStatus">
-<div class="status-item"><div class="status-label">Loading...</div></div>
-</div>
-</div>
+    <div class="stage">
+        <div id="mount-sonnet" class="reactor" data-tier="sonnet" style="--theme: var(--c-sonnet)"></div>
+        <div id="mount-haiku" class="reactor" data-tier="haiku" style="--theme: var(--c-haiku)"></div>
+        <div id="mount-opus" class="reactor" data-tier="opus" style="--theme: var(--c-opus)"></div>
+    </div>
 
-<div class="card">
-<h2>Routing Configuration</h2>
-<p class="description">Select provider and model for each tier. Changes apply immediately without restart.</p>
+    <div class="action-bar">
+        <button id="btn-apply" class="btn-apply" onclick="applyChanges()">INITIALIZE SYSTEM</button>
+        <button id="btn-config" class="btn-config" onclick="toggleConfig()" style="display: none;">CONFIG</button>
+    </div>
 
-<div class="tier-row">
-<span class="tier-label">Sonnet</span>
-<select id="sonnet_provider">
-<option value="antigravity">Antigravity</option>
-<option value="glm">GLM</option>
-<option value="anthropic">Anthropic</option>
-<option value="copilot">GitHub Copilot</option>
-</select>
-<span class="arrow">→</span>
-<select id="sonnet_model"></select>
-</div>
+    <!-- Hidden Configuration Section -->
+    <div id="config-section" style="display: none; position: fixed; bottom: 20px; right: 20px; background: #111; border: 1px solid #333; padding: 20px; border-radius: 10px; max-width: 400px;">
+        <h3 style="margin: 0 0 15px 0; color: #888;">Custom Provider Configuration</h3>
+        <div style="margin-bottom: 10px;">
+            <label style="display: block; margin-bottom: 5px; font-size: 12px; color: #666;">API Key</label>
+            <input type="text" id="custom-api-key" style="width: 100%; background: #222; border: 1px solid #444; color: #fff; padding: 8px; border-radius: 4px;" />
+        </div>
+        <div style="margin-bottom: 10px;">
+            <label style="display: block; margin-bottom: 5px; font-size: 12px; color: #666;">API URL</label>
+            <input type="text" id="custom-base-url" style="width: 100%; background: #222; border: 1px solid #444; color: #fff; padding: 8px; border-radius: 4px;" />
+        </div>
+        <div style="margin-bottom: 10px;">
+            <label style="display: block; margin-bottom: 5px; font-size: 12px; color: #666;">Sonnet Model</label>
+            <input type="text" id="custom-sonnet-model" style="width: 100%; background: #222; border: 1px solid #444; color: #fff; padding: 8px; border-radius: 4px;" value="claude-sonnet-4.5" />
+        </div>
+        <div style="margin-bottom: 10px;">
+            <label style="display: block; margin-bottom: 5px; font-size: 12px; color: #666;">Haiku Model</label>
+            <input type="text" id="custom-haiku-model" style="width: 100%; background: #222; border: 1px solid #444; color: #fff; padding: 8px; border-radius: 4px;" value="claude-haiku-4.5" />
+        </div>
+        <div style="margin-bottom: 15px;">
+            <label style="display: block; margin-bottom: 5px; font-size: 12px; color: #666;">Opus Model</label>
+            <input type="text" id="custom-opus-model" style="width: 100%; background: #222; border: 1px solid #444; color: #fff; padding: 8px; border-radius: 4px;" value="claude-opus-4.5" />
+        </div>
+        <button onclick="saveCustomConfig()" style="background: #444; border: none; color: #fff; padding: 8px 16px; border-radius: 4px; cursor: pointer;">Save</button>
+        <button onclick="toggleConfig()" style="background: #666; border: none; color: #fff; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-left: 10px;">Cancel</button>
+    </div>
 
-<div class="tier-row">
-<span class="tier-label">Haiku</span>
-<select id="haiku_provider">
-<option value="antigravity">Antigravity</option>
-<option value="glm">GLM</option>
-<option value="anthropic">Anthropic</option>
-<option value="copilot">GitHub Copilot</option>
-</select>
-<span class="arrow">→</span>
-<select id="haiku_model"></select>
-</div>
+    <script>
+        // --- CONFIG & STATE ---
+        const PROVIDERS = [
+            { id: 'antigravity', icon: 'icon-antigravity', label: 'AG' },
+            { id: 'zai', icon: 'icon-zai', label: 'Z' },
+            { id: 'anthropic', icon: 'icon-anthropic', label: 'AN' },
+            { id: 'copilot', icon: 'icon-copilot', label: 'GH' },
+            { id: 'openrouter', icon: 'icon-openrouter', label: 'OR' },
+            { id: 'custom', icon: 'icon-custom', label: 'CU' }
+        ];
 
-<div class="tier-row">
-<span class="tier-label">Opus</span>
-<select id="opus_provider">
-<option value="antigravity">Antigravity</option>
-<option value="glm">GLM</option>
-<option value="anthropic">Anthropic</option>
-<option value="copilot">GitHub Copilot</option>
-</select>
-<span class="arrow">→</span>
-<select id="opus_model"></select>
-</div>
+        let state = {
+            config: {},         // Current local config
+            serverConfig: {},   // Server config (for diff)
+            models: {},         // Available models map
+            availability: {}    // Provider status
+        };
 
-<button onclick="applyConfig()">Apply Changes</button>
-<div id="message"></div>
-</div>
-</div>
+        // --- MATH HELPERS ---
+        function describeArc(x, y, radius, startAngle, endAngle) {
+            const start = polarToCartesian(x, y, radius, endAngle);
+            const end = polarToCartesian(x, y, radius, startAngle);
+            const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
+            return [
+                "M", start.x, start.y,
+                "A", radius, radius, 0, largeArcFlag, 0, end.x, end.y
+            ].join(" ");
+        }
 
-<script>
-let config = {};
-let availableModels = {};
-let providersAvailable = {};
+        function polarToCartesian(centerX, centerY, radius, angleInDegrees) {
+            const angleInRadians = (angleInDegrees - 90) * Math.PI / 180.0;
+            return {
+                x: centerX + (radius * Math.cos(angleInRadians)),
+                y: centerY + (radius * Math.sin(angleInRadians))
+            };
+        }
 
-async function loadConfig() {
-try {
-const response = await fetch('/config');
-const data = await response.json();
-config = data.config;
-availableModels = data.available_models;
-providersAvailable = data.providers_available;
+        function describeSector(x, y, rInner, rOuter, startAngle, endAngle) {
+            const p1 = polarToCartesian(x, y, rOuter, endAngle);
+            const p2 = polarToCartesian(x, y, rOuter, startAngle);
+            const p3 = polarToCartesian(x, y, rInner, startAngle);
+            const p4 = polarToCartesian(x, y, rInner, endAngle);
 
-document.getElementById('sonnet_provider').value = config.sonnet_provider;
-document.getElementById('haiku_provider').value = config.haiku_provider;
-document.getElementById('opus_provider').value = config.opus_provider;
+            const largeArc = endAngle - startAngle <= 180 ? 0 : 1;
 
-populateModelDropdown('sonnet', config.sonnet_provider, config.sonnet_model);
-populateModelDropdown('haiku', config.haiku_provider, config.haiku_model);
-populateModelDropdown('opus', config.opus_provider, config.opus_model);
+            return `
+                M ${p3.x} ${p3.y}
+                L ${p2.x} ${p2.y}
+                A ${rOuter} ${rOuter} 0 ${largeArc} 0 ${p1.x} ${p1.y}
+                L ${p4.x} ${p4.y}
+                A ${rInner} ${rInner} 0 ${largeArc} 1 ${p3.x} ${p3.y}
+                Z
+            `;
+        }
 
-document.getElementById('sonnet_provider').onchange = (e) => populateModelDropdown('sonnet', e.target.value);
-document.getElementById('haiku_provider').onchange = (e) => populateModelDropdown('haiku', e.target.value);
-document.getElementById('opus_provider').onchange = (e) => populateModelDropdown('opus', e.target.value);
+        // --- RENDER ENGINE ---
+        // --- RENDER ENGINE ---
+        class Reactor {
+            constructor(el, tier) {
+                this.el = el;
+                this.tier = tier;
+                this.size = 400;
+                this.cx = 200;
+                this.cy = 200;
+                this.hoveredProvider = null;
 
-updateProviderStatus();
-} catch (error) {
-console.error('Failed to load config:', error);
-showMessage('Failed to load configuration: ' + error.message, 'error');
-}
-}
+                // Radii configuration
+                this.rCore = 50;
+                this.rProvInner = 52;
+                this.rProvOuter = 100;
+                this.rModInner = 102; // Tight fit, only 2px gap
+                this.rModOuter = 198; // Maximize size
 
-function populateModelDropdown(tier, provider, selectedModel) {
-const select = document.getElementById(tier + '_model');
-const models = availableModels[provider] || [];
-select.innerHTML = '';
-models.forEach(model => {
-const option = document.createElement('option');
-option.value = model;
-option.textContent = model;
-select.appendChild(option);
-});
-if (selectedModel && models.includes(selectedModel)) {
-select.value = selectedModel;
-} else if (models.length > 0) {
-select.value = models[0];
-}
-}
+                this.initialized = false;
+            }
 
-function updateProviderStatus() {
-const div = document.getElementById('providerStatus');
-const providers = [
-{ name: 'Antigravity', key: 'antigravity' },
-{ name: 'GLM', key: 'glm' },
-{ name: 'Anthropic', key: 'anthropic' },
-{ name: 'GitHub Copilot', key: 'copilot' }
-];
-div.innerHTML = providers.map(p => {
-const available = providersAvailable[p.key];
-const statusClass = available ? 'available' : 'unavailable';
-const statusText = available ? 'Available' : 'Not Configured';
-return '<div class="status-item ' + statusClass + '"><div class="status-label">' + p.name + '</div><div class="status-value">' + statusText + '</div></div>';
-}).join('');
-}
+            // Called once to set up the SVG structure and static paths
+            init() {
+                this.el.innerHTML = `
+                    <svg viewBox="0 0 400 400" onmouseleave="reactorLeave('${this.tier}')">
+                        <defs>
+                            <filter id="glow-${this.tier}" x="-20%" y="-20%" width="140%" height="140%">
+                                <feGaussianBlur stdDeviation="5" result="blur" />
+                                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                            </filter>
+                        </defs>
+                        <g class="grp-tracks" style="pointer-events:none; opacity:0.1; stroke:#444; stroke-width:1; fill:none;">
+                            <circle cx="${this.cx}" cy="${this.cy}" r="${this.rProvInner}" />
+                            <circle cx="${this.cx}" cy="${this.cy}" r="${this.rProvOuter}" />
+                            <circle cx="${this.cx}" cy="${this.cy}" r="${this.rModInner}" />
+                            <circle cx="${this.cx}" cy="${this.cy}" r="${this.rModOuter}" />
+                        </g>
+                        <g class="grp-core"></g>
+                        <g class="grp-prov"></g>
+                        <g class="grp-model"></g>
+                    </svg>
+                `;
 
-async function applyConfig() {
-const button = event.target;
-button.disabled = true;
-button.textContent = 'Applying...';
+                this.drawCoreStatic();
+                this.drawProvidersStatic();
+                this.initialized = true;
+            }
 
-const updates = {
-sonnet_provider: document.getElementById('sonnet_provider').value,
-haiku_provider: document.getElementById('haiku_provider').value,
-opus_provider: document.getElementById('opus_provider').value,
-sonnet_model: document.getElementById('sonnet_model').value,
-haiku_model: document.getElementById('haiku_model').value,
-opus_model: document.getElementById('opus_model').value
-};
+            drawCoreStatic() {
+                const g = this.el.querySelector('.grp-core');
+                g.innerHTML = `
+                    <circle cx="${this.cx}" cy="${this.cy}" r="${this.rCore}" class="layer-core" />
+                    <text x="${this.cx}" y="${this.cy - 10}" class="text-core-label">${this.tier.toUpperCase()}</text>
+                    <text x="${this.cx}" y="${this.cy + 15}" class="text-core-sub">...</text>
+                `;
+            }
 
-try {
-const response = await fetch('/config', {
-method: 'POST',
-headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify(updates)
-});
-const data = await response.json();
-if (response.ok) {
-config = data.config;
-showMessage('Configuration updated successfully!', 'success');
-} else {
-showMessage('Error: ' + (data.error || 'Unknown error'), 'error');
-}
-} catch (error) {
-showMessage('Failed to update: ' + error.message, 'error');
-} finally {
-button.disabled = false;
-button.textContent = 'Apply Changes';
-}
-}
+            drawProvidersStatic() {
+                const g = this.el.querySelector('.grp-prov');
+                const pCount = PROVIDERS.length;
+                const pStep = 360 / pCount;
 
-function showMessage(text, type) {
-const msgDiv = document.getElementById('message');
-msgDiv.textContent = text;
-msgDiv.className = type;
-setTimeout(() => { msgDiv.style.display = 'none'; }, 5000);
-}
+                let html = '';
+                PROVIDERS.forEach((p, i) => {
+                    const startA = i * pStep;
+                    const endA = (i + 1) * pStep;
+                    const d = describeSector(this.cx, this.cy, this.rProvInner, this.rProvOuter, startA + 1, endA - 1);
 
-loadConfig();
-setInterval(loadConfig, 10000);
-</script>
+                    const midA = startA + (pStep / 2);
+                    const iconPos = polarToCartesian(this.cx, this.cy, (this.rProvInner + this.rProvOuter)/2, midA);
+
+                    html += `
+                        <g class="prov-item" data-id="${p.id}"
+                           onmouseenter="reactorHover('${this.tier}', '${p.id}')"
+                           onclick="selectProvider('${this.tier}', '${p.id}')">
+                            <path d="${d}" class="layer-prov" />
+                            <use href="#${p.icon}" x="${iconPos.x - 12}" y="${iconPos.y - 12}" width="24" height="24"
+                                 class="prov-icon" style="pointer-events:none;" />
+                        </g>
+                    `;
+                });
+                g.innerHTML = html;
+            }
+
+            render() {
+                if (!this.initialized) this.init();
+                this.update();
+            }
+
+            update() {
+                const curProv = state.config[`${this.tier}_provider`];
+                const curMod = state.config[`${this.tier}_model`];
+                const targetProv = this.hoveredProvider || curProv;
+
+                // 1. Update Core Text
+                const subText = this.el.querySelector('.text-core-sub');
+                if(subText) subText.textContent = shortText(curMod);
+
+                // 2. Update Providers (Classes only)
+                const provItems = this.el.querySelectorAll('.prov-item');
+                provItems.forEach(el => {
+                    const pid = el.dataset.id;
+                    const path = el.querySelector('path');
+                    const icon = el.querySelector('use');
+
+                    const isHovered = this.hoveredProvider === pid;
+                    const isActive = curProv === pid;
+                    // Dormant: Selected but we are hovering someone else
+                    const isDormant = isActive && this.hoveredProvider && !isHovered;
+
+                    // Class Logic
+                    let classes = ['layer-prov'];
+
+                    if (isHovered) classes.push('hover');
+                    if (isActive && !isDormant) classes.push('active');
+                    if (isDormant) classes.push('selected-dormant');
+
+                    // Dim non-target items
+                    if (targetProv && pid !== targetProv) {
+                        classes.push('dim');
+                        icon.classList.add('dim');
+                    } else {
+                        icon.classList.remove('dim');
+                    }
+
+                    path.setAttribute('class', classes.join(' '));
+
+                    // Icon Fill Logic
+                    if (isActive && !isDormant) {
+                        icon.style.fill = '#000';
+                    } else if (isHovered) {
+                        icon.style.fill = '#fff';
+                    } else {
+                        icon.style.fill = '#666';
+                    }
+                });
+
+                // 3. Re-draw Models
+                this.drawModels(curProv, curMod, targetProv);
+            }
+
+            drawModels(curProv, curMod, targetProv) {
+                const g = this.el.querySelector('.grp-model');
+                const models = getModelsFor(targetProv, this.tier);
+
+                // Clear previous
+                g.innerHTML = '';
+
+                if (models.length === 0) {
+                    // Draw empty track if no models
+                    g.innerHTML = `<circle cx="${this.cx}" cy="${this.cy}" r="${(this.rModInner + this.rModOuter)/2}"
+                                        stroke="#111" stroke-width="${this.rModOuter - this.rModInner}" fill="none" opacity="0.5"/>`;
+                    g.style.opacity = '1';
+                    return;
+                }
+
+                // --- FULL CIRCLE LOGIC ---
+                // The outer ring is dedicated entirely to the models of the TARGET provider.
+                // It fills 360 degrees.
+
+                const totalArc = 360;
+                const startAngleGlobal = -90; // Start at top
+                const mStep = totalArc / models.length;
+
+                let html = '';
+
+                models.forEach((m, i) => {
+                    const startA = startAngleGlobal + (i * mStep);
+                    const endA = startA + mStep;
+                    const isSelected = curMod === m && curProv === targetProv;
+
+                    // 1. Draw the Wedge
+                    // Use a tiny gap (0.5deg) for visual separation, or 0 for solid pie
+                    // User asked for "enclosed", so let's use a very thin stroke instead of gap?
+                    // Let's stick to 0.2 degree gap for clean "instrument" look
+                    const gap = models.length > 1 ? 0.5 : 0;
+                    const d = describeSector(this.cx, this.cy, this.rModInner, this.rModOuter, startA + gap, endA - gap);
+
+                    // 2. Text Position
+                    const midA = startA + (mStep / 2);
+                    const normMidA = (midA % 360 + 360) % 360;
+
+                    const textRadius = (this.rModInner + this.rModOuter)/2;
+                    let textPos = polarToCartesian(this.cx, this.cy, textRadius, midA);
+
+                    let label = cleanName(m);
+
+                    // 3. Text Rotation
+                    // Radial rotation
+                    let rot = normMidA - 90;
+                    // Flip if on left side
+                    if (normMidA > 90 && normMidA < 270) rot += 180;
+
+                    // 4. Truncation / Hiding
+                    // Calculate available arc width at text radius
+                    const arcLenPx = (mStep/360) * (2 * Math.PI * textRadius);
+                    // Approx 7px per char
+                    const maxChars = Math.floor(arcLenPx / 7);
+
+                    if (maxChars < 3) {
+                        // Too small for text, show nothing (or maybe a dot?)
+                        label = "";
+                    } else if (label.length > maxChars) {
+                        label = label.substring(0, maxChars-1) + '…';
+                    }
+
+                    html += `
+                        <g class="model-item" onclick="selectModel('${this.tier}', '${targetProv}', '${m}')">
+                            <path d="${d}" class="layer-model visible ${isSelected?'selected':''}" stroke="#000" stroke-width="2" />
+                            ${label ? `
+                            <text x="${textPos.x}" y="${textPos.y}"
+                                  transform="rotate(${rot}, ${textPos.x}, ${textPos.y})"
+                                  class="text-model">
+                                ${label}
+                            </text>` : ''}
+                        </g>
+                    `;
+                });
+
+                g.innerHTML = html;
+                g.style.opacity = '1';
+            }
+        }
+
+        // --- APP LOGIC ---
+        const reactors = {};
+
+        function init() {
+            ['sonnet', 'haiku', 'opus'].forEach(t => {
+                reactors[t] = new Reactor(document.getElementById(`mount-${t}`), t);
+            });
+            fetchData();
+            setInterval(fetchData, 2000);
+        }
+
+        async function fetchData() {
+            try {
+                const r = await fetch('/config');
+                const d = await r.json();
+
+                // Diff check
+                const sLocal = JSON.stringify(state.config);
+                const sServer = JSON.stringify(d.config);
+                const dirty = sLocal !== "{}" && sLocal !== sServer;
+
+                if (Object.keys(state.config).length === 0) {
+                    // First load
+                    state.config = d.config;
+                    state.serverConfig = d.config;
+                    state.models = d.available_models;
+                    state.availability = d.providers_available;
+                    renderAll();
+                } else {
+                    // Background update
+                    state.serverConfig = d.config;
+                    state.models = d.available_models;
+                    state.availability = d.providers_available;
+                    // Don't overwrite local config if user is editing, unless we want live updates
+                    // Re-render only to update status dots?
+                }
+
+                document.getElementById('sys-status').classList.toggle('ok', true);
+                updateButton(dirty);
+            } catch (e) {
+                document.getElementById('sys-status').classList.remove('ok');
+            }
+        }
+
+        function renderAll() {
+            Object.values(reactors).forEach(r => r.render());
+        }
+
+        // --- INTERACTION ---
+        window.reactorHover = (tier, provId) => {
+            reactors[tier].hoveredProvider = provId;
+            reactors[tier].render();
+        };
+
+        window.reactorLeave = (tier) => {
+            reactors[tier].hoveredProvider = null;
+            reactors[tier].render();
+        };
+
+        window.selectProvider = (tier, provId) => {
+            state.config[`${tier}_provider`] = provId;
+            // Auto-select first/best model
+            const ms = getModelsFor(provId, tier);
+            if(ms.length) state.config[`${tier}_model`] = ms[0];
+
+            renderAll();
+            checkDirty();
+        };
+
+        window.selectModel = (tier, provId, modelId) => {
+            state.config[`${tier}_provider`] = provId;
+            state.config[`${tier}_model`] = modelId;
+            renderAll();
+            checkDirty();
+        };
+
+        window.applyChanges = async () => {
+            const btn = document.getElementById('btn-apply');
+            btn.innerText = "SAVING...";
+            await fetch('/config', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify(state.config)
+            });
+            btn.innerText = "INITIALIZE SYSTEM";
+            fetchData(); // Reload
+        };
+
+        function checkDirty() {
+            const dirty = JSON.stringify(state.config) !== JSON.stringify(state.serverConfig);
+            updateButton(dirty);
+        }
+
+        function updateButton(dirty) {
+            const btn = document.getElementById('btn-apply');
+            if(dirty) btn.classList.add('ready');
+            else btn.classList.remove('ready');
+
+            // Show config button if custom provider is available
+            const btnConfig = document.getElementById('btn-config');
+            if (state.availability.custom) {
+                btnConfig.style.display = 'inline-block';
+            } else {
+                btnConfig.style.display = 'none';
+            }
+        }
+
+        // --- UTILS ---
+        function getModelsFor(prov, tier) {
+            let ms = state.models[prov] || [];
+            // Cleanup: remove gemini-2.5, remove exact provider name matches (e.g. 'z.ai' in 'z.ai' list)
+            ms = ms.filter(x => {
+                if (x.includes('gemini-2.5')) return false;
+                if (x === prov) return false; // Remove "z.ai" model from "z.ai" provider
+                if (x === 'antigravity') return false;
+                return true;
+            });
+            return ms;
+        }
+
+        function shortText(t) {
+            if(!t) return '';
+            return cleanName(t).substring(0, 15);
+        }
+
+        function cleanName(t) {
+             let s = t.toLowerCase();
+             // Remove provider prefixes commonly seen
+             s = s.replace('anthropic/','')
+                  .replace('google/','')
+                  .replace('openai/','')
+                  .replace('mistral/','')
+                  .replace('meta/','')
+                  .replace('z.ai/','')
+                  .replace('zai/','')
+                  .replace('cohere/','')
+                  .replace('deepseek/','')
+                  .replace('perplexity/','');
+
+            // Remove common model prefixes
+            s = s.replace('claude-','')
+                 .replace('gemini-','')
+                 .replace('gpt-','')
+                 .replace('llama-','')
+                 .replace('mistral-','');
+
+            return s.toUpperCase();
+        }
+
+        // Configuration functions
+        function toggleConfig() {
+            const configSection = document.getElementById('config-section');
+            const btnConfig = document.getElementById('btn-config');
+            configSection.style.display = configSection.style.display === 'none' ? 'block' : 'none';
+            btnConfig.style.display = configSection.style.display === 'none' ? 'none' : 'block';
+        }
+
+        function saveCustomConfig() {
+            const config = {
+                custom_api_key: document.getElementById('custom-api-key').value,
+                custom_base_url: document.getElementById('custom-base-url').value,
+                custom_sonnet_model: document.getElementById('custom-sonnet-model').value,
+                custom_haiku_model: document.getElementById('custom-haiku-model').value,
+                custom_opus_model: document.getElementById('custom-opus-model').value
+            };
+
+            // Save to local storage temporarily
+            localStorage.setItem('custom_config', JSON.stringify(config));
+
+            // Apply the configuration
+            applyCustomConfig(config);
+
+            // Hide config section
+            toggleConfig();
+        }
+
+        function applyCustomConfig(config) {
+            if (!config.custom_api_key || !config.custom_base_url) {
+                alert('Please fill in API Key and API URL');
+                return;
+            }
+
+            // Update .env file with custom provider settings
+            updateEnvFile({
+                CUSTOM_PROVIDER_API_KEY: config.custom_api_key,
+                CUSTOM_PROVIDER_BASE_URL: config.custom_base_url,
+                CUSTOM_PROVIDER_SONNET_MODEL: config.custom_sonnet_model,
+                CUSTOM_PROVIDER_HAIKU_MODEL: config.custom_haiku_model,
+                CUSTOM_PROVIDER_OPUS_MODEL: config.custom_opus_model
+            });
+
+            // Update provider configuration to use custom
+            const updatePayload = {};
+            updatePayload[`${state.config.sonnet || 'sonnet'}_provider`] = 'custom';
+            updatePayload[`${state.config.haiku || 'haiku'}_provider`] = 'custom';
+            updatePayload[`${state.config.opus || 'opus'}_provider`] = 'custom';
+
+            applyChanges();
+        }
+
+        function updateEnvFile(updates) {
+            // This would normally update the .env file, but for now we'll just show a message
+            const envData = localStorage.getItem('custom_config');
+            console.log('Updating env with:', updates);
+        }
+
+        // Start
+        document.addEventListener('DOMContentLoaded', init);
+
+    </script>
 </body>
 </html>

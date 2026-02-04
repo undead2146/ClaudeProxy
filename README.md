@@ -1,6 +1,6 @@
 ﻿# Claude Code Proxy: Weekly Rate Limits? Resolved!
 
-Route **each Claude Code model tier** to **different providers**! Use free **Gemini 3** models through **Antigravity**, direct **Anthropic API**, **GitHub Copilot** access, or **GLM** models - all at the same time through one unified proxy with zero-downtime switching via web dashboard.
+Route **each Claude Code model tier** to **different providers**! Use free **Gemini 3** models through **Antigravity**, direct **Anthropic API**, **GitHub Copilot** access, or **Z.AI** models - all at the same time through one unified proxy with zero-downtime switching via web dashboard.
 
 ## Why This Exists
 
@@ -42,7 +42,7 @@ $env:ANTHROPIC_BASE_URL = "http://localhost:8082"
 
 ## Key Features
 
-- ✨ **4+ Providers** - Antigravity (Gemini), GLM, Anthropic, GitHub Copilot.
+- ✨ **4+ Providers** - Antigravity (Gemini), Z.AI, Anthropic, GitHub Copilot.
 - 🔄 **Dynamic Switching** - Change providers/models without restart via web dashboard.
 - 💰 **Cost Optimized** - Use free Gemini for heavy tasks, keep Claude for premium needs.
 - 🔐 **OAuth Preserved** - Keep your Claude subscription active for Sonnet/Opus.
@@ -78,7 +78,6 @@ npm install -g antigravity-claude-proxy@latest
 - ✅ Free Gemini 3 Flash, Pro models.
 - ✅ Claude models via Gemini API translation.
 - ✅ Multiple account support.
-- ⚠️ **Note:** Thinking models `[1m]` may hit rate limits; use non-thinking versions for stability.
 
 ### Anthropic Direct API
 
@@ -94,12 +93,12 @@ Use Claude models through your GitHub Copilot subscription.
 **Setup:**
 - Add `GITHUB_COPILOT_API_KEY=ghu_xxx` to your `.env` file.
 
-### GLM (Z.AI)
+### Z.AI (Zhipu)
 
 Fast Chinese language models from Zhipu AI.
 
 **Setup:**
-- Add `GLM_API_KEY=your-key` to your `.env` file.
+- Add `ZAI_API_KEY=your-key` to your `.env` file.
 
 ## 🛠️ Management Commands
 
@@ -168,8 +167,8 @@ To have the proxy start automatically when Windows boots (regardless of login):
 ## 🔧 Troubleshooting
 
 ### "Max retries exceeded" / 429 Errors
-This usually happens when using **Thinking Models** (suffixed with `[1m]`) through Antigravity. Google's infrastructure has separate rate limits for thinking mode.
-- **Solution:** Select the non-thinking version of the model in the Dashboard (e.g., `claude-sonnet-4-5` instead of `claude-sonnet-4-5[1m]`).
+This happens when Google accounts hit rate limits from too many requests.
+- **Solution:** Add more Google accounts to Antigravity to distribute the load.
 
 ### Account Marked "Unhealthy"
 If an account hits too many rate limits, Antigravity marks it unhealthy.

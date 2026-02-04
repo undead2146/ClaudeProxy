@@ -3,152 +3,244 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Proxy Logs</title>
+    <title>Claude Proxy // Logs</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0d1117; color: #c9d1d9; padding: 20px; }
-        h1 { margin-bottom: 20px; color: #58a6ff; }
-        .controls { margin-bottom: 15px; display: flex; gap: 10px; align-items: center; }
-        button { padding: 8px 16px; background: #238636; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; }
-        button:hover { background: #2ea043; }
-        button:active { background: #2c974b; }
-        .clear-btn { background: #da3633; }
-        .clear-btn:hover { background: #f85149; }
-        #logContainer { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 15px; max-height: calc(100vh - 150px); overflow-y: auto; font-family: "Consolas", "Monaco", monospace; font-size: 13px; line-height: 1.8; }
-        .log-entry { padding: 6px 0; border-bottom: 1px solid #21262d; display: flex; gap: 12px; }
-        .log-entry:last-child { border-bottom: none; }
-        .log-time { color: #6e7681; min-width: 90px; flex-shrink: 0; }
-        .log-level { min-width: 70px; flex-shrink: 0; font-weight: bold; }
-        .log-message { flex: 1; word-break: break-word; }
-        .log-INFO { color: #58a6ff; }
-        .log-WARNING { color: #d29922; }
-        .log-ERROR { color: #f85149; }
-        .log-DEBUG { color: #8b949e; }
-        .auto-scroll-label { display: flex; align-items: center; gap: 5px; font-size: 14px; }
-        input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
-        .copy-btn { background: #1f6feb; }
-        .copy-btn:hover { background: #388bfd; }
+        :root {
+            --bg: #030303;
+            --panel: #0a0a0a;
+            --text-main: #e0e0e0;
+            --text-muted: #666;
+
+            --sonnet: #ffaa00;
+            --haiku: #00ffaa;
+            --opus: #aa00ff;
+            --error: #ff3333;
+            --debug: #444;
+
+            --font-stack: 'SF Mono', 'Segoe UI Mono', 'Roboto Mono', monospace;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text-main);
+            font-family: var(--font-stack);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            background-image:
+                linear-gradient(rgba(20,20,20,0.5) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(20,20,20,0.5) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        /* HEADER */
+        .hud-header {
+            padding: 24px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(to bottom, #000, transparent);
+            border-bottom: 1px solid #111;
+        }
+        .brand {
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            color: #fff;
+            text-decoration: none;
+            text-shadow: 0 0 10px rgba(255,255,255,0.3);
+        }
+        .controls { display: flex; gap: 15px; align-items: center; }
+
+        button {
+            background: #111;
+            color: #888;
+            border: 1px solid #333;
+            padding: 8px 16px;
+            font-family: var(--font-stack);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        button:hover {
+            color: #fff;
+            border-color: #666;
+            background: #222;
+        }
+        button.action { border-color: var(--haiku); color: var(--haiku); }
+        button.action:hover { background: var(--haiku); color: #000; }
+
+        button.danger { border-color: var(--error); color: var(--error); }
+        button.danger:hover { background: var(--error); color: #000; }
+
+        .toggle-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #666; }
+        input[type="checkbox"] { accent-color: var(--haiku); }
+
+        /* LOG CONTAINER */
+        #logContainer {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px 40px;
+            scroll-behavior: smooth;
+        }
+
+        .log-entry {
+            display: flex;
+            gap: 20px;
+            padding: 4px 0;
+            border-bottom: 1px solid #0a0a0a;
+            font-size: 13px;
+            line-height: 1.6;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+        }
+        .log-entry:hover { opacity: 1; background: rgba(255,255,255,0.02); }
+
+        .ts { color: #444; min-width: 90px; }
+        .lvl { font-weight: 700; min-width: 70px; }
+        .msg { color: #ccc; white-space: pre-wrap; word-break: break-all; }
+
+        .lvl-INFO { color: #58a6ff; }
+        .lvl-WARNING { color: var(--sonnet); }
+        .lvl-ERROR { color: var(--error); }
+        .lvl-DEBUG { color: #444; }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #000; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+
     </style>
 </head>
 <body>
-    <h1>Proxy Logs</h1>
-    
-    <div class="controls">
-        <button onclick="window.location.href='/dashboard'">Back to Dashboard</button>
-        <button class="copy-btn" onclick="copyLogs()">Copy All</button>
-        <button class="clear-btn" onclick="clearDisplay()">Clear Display</button>
-        <label class="auto-scroll-label">
-            <input type="checkbox" id="autoScroll" checked>
-            Auto-scroll
-        </label>
+
+    <div class="hud-header">
+        <a href="/dashboard" class="brand">CLAUDE_PROXY // SYSTEM_LOGS</a>
+
+        <div class="controls">
+            <div class="toggle-row">
+                <input type="checkbox" id="autoScroll" checked>
+                <label for="autoScroll">AUTO-SCROLL</label>
+            </div>
+            <button onclick="copyLogs()">COPY ALL</button>
+            <button class="danger" onclick="clearDisplay()">CLEAR</button>
+            <button onclick="window.location.href='/dashboard'">EXIT</button>
+        </div>
     </div>
-    
+
     <div id="logContainer"></div>
-    
+
     <script>
+        // Auth handling
+        const urlParams = new URLSearchParams(window.location.search);
+        let apiKey = urlParams.get('key') || localStorage.getItem('proxy_key');
+
+        if (urlParams.get('key')) {
+            localStorage.setItem('proxy_key', urlParams.get('key'));
+        }
+
+        function getHeaders() {
+            const headers = {};
+            if (apiKey) headers['x-proxy-key'] = apiKey;
+            return headers;
+        }
+
+        async function handleAuthError(response) {
+            if (response.status === 401) {
+                const newKey = prompt("ACCESS DENIED // ENTER KEY:");
+                if (newKey) {
+                    apiKey = newKey;
+                    localStorage.setItem('proxy_key', newKey);
+                    window.location.reload();
+                }
+                throw new Error("Auth Failed");
+            }
+            return response;
+        }
+
         let autoScroll = true;
         let displayedLogs = [];
-        
+
         document.getElementById('autoScroll').addEventListener('change', (e) => {
             autoScroll = e.target.checked;
         });
-        
+
         function fetchLogs() {
-            fetch('/logs')
-                .then(response => response.json())
-                .then(data => {
-                    displayedLogs = data.logs || [];
+            fetch('/logs', { headers: getHeaders() })
+                .then(handleAuthError)
+                .then(r => r.json())
+                .then(d => {
+                    displayedLogs = d.logs || [];
                     renderLogs();
                 })
-                .catch(error => console.error('Error fetching logs:', error));
+                .catch(console.error);
         }
-        
+
         function renderLogs() {
             const container = document.getElementById('logContainer');
-            const wasAtBottom = container.scrollHeight - container.scrollTop === container.clientHeight;
-            
+            const wasAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
+
             if (displayedLogs.length === 0) {
-                container.innerHTML = '<div style="color: #6e7681; text-align: center; padding: 20px;">No logs to display</div>';
+                container.innerHTML = '<div style="color:#333; padding:20px; text-align:center">NO_DATA</div>';
                 return;
             }
-            
+
             container.innerHTML = displayedLogs.map(log => {
                 let level = 'INFO';
                 let text = '';
                 let timestamp = '';
-                
+
                 if (typeof log === 'object' && log.message) {
                     level = log.level || 'INFO';
                     text = log.message;
                     timestamp = new Date(log.timestamp).toLocaleTimeString();
-                } else if (typeof log === 'string') {
-                    text = log;
-                    timestamp = new Date().toLocaleTimeString();
-                    if (log.includes('ERROR')) level = 'ERROR';
-                    else if (log.includes('WARNING')) level = 'WARNING';
-                    else if (log.includes('DEBUG')) level = 'DEBUG';
                 } else {
                     text = String(log);
                     timestamp = new Date().toLocaleTimeString();
+                    if (text.includes('ERROR')) level = 'ERROR';
+                    else if (text.includes('WARNING')) level = 'WARNING';
                 }
-                
-                const escapedText = text
-                    .replace(/&/g, '&amp;')
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;');
-                
-                const levelColors = {
-                    'INFO': '#58a6ff',
-                    'WARNING': '#d29922',
-                    'ERROR': '#f85149',
-                    'DEBUG': '#8b949e'
-                };
-                const levelColor = levelColors[level] || '#58a6ff';
-                
-                return `<div class="log-entry">
-                    <span class="log-time">${timestamp}</span>
-                    <span class="log-level" style="color: ${levelColor}">[${level}]</span>
-                    <span class="log-message">${escapedText}</span>
-                </div>`;
+
+                // Escape HTML
+                text = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+                return `
+                    <div class="log-entry">
+                        <div class="ts">${timestamp}</div>
+                        <div class="lvl lvl-${level}">[${level}]</div>
+                        <div class="msg">${text}</div>
+                    </div>
+                `;
             }).join('');
-            
+
             if (autoScroll && wasAtBottom) {
                 container.scrollTop = container.scrollHeight;
             }
         }
-        
+
         function clearDisplay() {
-            // Clear server-side logs
-            fetch('/logs/clear', { method: 'POST' })
+            fetch('/logs/clear', { method: 'POST', headers: getHeaders() })
+                .then(handleAuthError)
                 .then(() => {
-                    displayedLogs = [];
-                    renderLogs();
-                })
-                .catch(err => {
-                    console.error('Failed to clear logs:', err);
-                    // Still clear display even if server clear fails
                     displayedLogs = [];
                     renderLogs();
                 });
         }
-        
+
         function copyLogs() {
-            const text = displayedLogs.map(log => {
-                if (typeof log === 'object' && log.message) {
-                    return `${log.timestamp} [${log.level}] ${log.message}`;
-                } else if (typeof log === 'string') {
-                    return log;
-                } else {
-                    return String(log);
-                }
-            }).join('\n');
-            navigator.clipboard.writeText(text)
-                .then(() => alert('Logs copied to clipboard!'))
-                .catch(err => alert('Failed to copy logs'));
+            const text = displayedLogs.map(l =>
+                (typeof l === 'object') ? `[${l.timestamp}] [${l.level}] ${l.message}` : String(l)
+            ).join('\n');
+            navigator.clipboard.writeText(text).then(() => alert('LOGS COPIED'));
         }
-        
+
         fetchLogs();
-        setInterval(fetchLogs, 3000);
+        setInterval(fetchLogs, 2000);
     </script>
 </body>
 </html>

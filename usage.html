@@ -1,312 +1,356 @@
-﻿<!DOCTYPE html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Usage Statistics - Claude Code Proxy</title>
-<style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { 
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
-    background: #0d1117; 
-    color: #c9d1d9;
-    padding: 20px; 
-}
-.container { max-width: 1400px; margin: 0 auto; }
-.header { 
-    display: flex; 
-    justify-content: space-between; 
-    align-items: center; 
-    margin-bottom: 30px;
-    padding-bottom: 20px;
-    border-bottom: 2px solid #30363d;
-}
-h1 { 
-    color: #f0f6fc; 
-    font-size: 32px;
-    font-weight: 600;
-}
-.back-btn {
-    background: #21262d;
-    color: #f0f6fc;
-    border: 1px solid #30363d;
-    padding: 10px 20px;
-    border-radius: 6px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-}
-.back-btn:hover {
-    background: #30363d;
-    border-color: #58a6ff;
-}
-.card { 
-    background: #161b22; 
-    border: 1px solid #30363d;
-    border-radius: 8px; 
-    padding: 25px; 
-    margin-bottom: 20px;
-}
-.usage-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 20px;
-}
-.usage-card {
-    background: #161b22;
-    border: 1px solid #30363d;
-    border-radius: 8px;
-    padding: 20px;
-}
-.usage-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 15px;
-}
-.usage-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: #f0f6fc;
-}
-.usage-badge {
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-}
-.usage-badge.active {
-    background: rgba(63, 185, 80, 0.2);
-    color: #3fb950;
-}
-.usage-badge.inactive {
-    background: rgba(139, 148, 158, 0.2);
-    color: #8b949e;
-}
-.stat-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 10px 0;
-    border-bottom: 1px solid #21262d;
-}
-.stat-row:last-child {
-    border-bottom: none;
-}
-.stat-label {
-    color: #8b949e;
-    font-size: 14px;
-}
-.stat-value {
-    color: #f0f6fc;
-    font-weight: 600;
-    font-size: 14px;
-}
-.progress-bar {
-    width: 100%;
-    height: 8px;
-    background: #21262d;
-    border-radius: 4px;
-    overflow: hidden;
-    margin: 15px 0;
-}
-.progress-fill {
-    height: 100%;
-    background: linear-gradient(90deg, #3fb950, #2ea043);
-    border-radius: 4px;
-    transition: width 0.3s ease;
-}
-.progress-fill.warning {
-    background: linear-gradient(90deg, #f0883e, #d67e3e);
-}
-.progress-fill.danger {
-    background: linear-gradient(90deg, #f85149, #d83933);
-}
-.quota-label {
-    font-size: 12px;
-    color: #8b949e;
-    margin-bottom: 5px;
-}
-.quota-value {
-    font-size: 24px;
-    font-weight: 700;
-    color: #f0f6fc;
-    margin-bottom: 5px;
-}
-.quota-total {
-    font-size: 14px;
-    color: #8b949e;
-}
-.loading {
-    text-align: center;
-    padding: 40px;
-    color: #8b949e;
-}
-.error {
-    background: rgba(248, 81, 73, 0.1);
-    border: 1px solid #f85149;
-    color: #f85149;
-    padding: 15px;
-    border-radius: 6px;
-    margin-bottom: 20px;
-}
-.empty-state {
-    text-align: center;
-    padding: 40px;
-    color: #8b949e;
-    font-style: italic;
-}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claude Proxy // Metrics</title>
+    <style>
+        :root {
+            --bg: #030303;
+            --panel: #0a0a0a;
+            --text-main: #e0e0e0;
+            --text-muted: #666;
+
+            --sonnet: #ffaa00;
+            --haiku: #00ffaa;
+            --opus: #aa00ff;
+            --error: #ff3333;
+
+            --font-stack: 'SF Mono', 'Segoe UI Mono', 'Roboto Mono', monospace;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text-main);
+            font-family: var(--font-stack);
+            height: 100vh;
+            overflow-y: auto;
+            background-image:
+                linear-gradient(rgba(20,20,20,0.5) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(20,20,20,0.5) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        /* HEADER */
+        .hud-header {
+            padding: 24px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(to bottom, #000, transparent);
+            border-bottom: 1px solid #111;
+            margin-bottom: 40px;
+        }
+        .brand {
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            color: #fff;
+            text-decoration: none;
+            text-shadow: 0 0 10px rgba(255,255,255,0.3);
+        }
+
+        button {
+            background: #111;
+            color: #888;
+            border: 1px solid #333;
+            padding: 8px 16px;
+            font-family: var(--font-stack);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        button:hover {
+            color: #fff;
+            border-color: #666;
+            background: #222;
+        }
+
+        /* CONTENT */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 40px 40px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+        }
+
+        .card {
+            background: rgba(10,10,10,0.8);
+            border: 1px solid #222;
+            padding: 24px;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+        .card:hover {
+            transform: translateY(-2px);
+            border-color: #444;
+            background: rgba(15,15,15,0.9);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            border-bottom: 1px solid #222;
+            padding-bottom: 12px;
+        }
+        .card-title {
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: #fff;
+        }
+        .status-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: #333;
+            box-shadow: 0 0 0 1px #333;
+        }
+        .status-dot.active { background: var(--haiku); box-shadow: 0 0 10px var(--haiku); }
+        .status-dot.inactive { background: #333; }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            font-size: 13px;
+        }
+        .stat-label { color: #666; }
+        .stat-value { color: #ccc; font-weight: 600; text-align: right; }
+
+        /* PROGRESS BARS */
+        .progress-container {
+            margin: 20px 0;
+            background: #111;
+            height: 4px;
+            width: 100%;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            background: var(--haiku);
+            box-shadow: 0 0 10px var(--haiku);
+            width: 0%;
+            transition: width 1s ease;
+        }
+        .progress-bar.warn { background: var(--sonnet); box-shadow: 0 0 10px var(--sonnet); }
+        .progress-bar.danger { background: var(--error); box-shadow: 0 0 10px var(--error); }
+
+        .quota-display {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .big-number {
+            font-size: 32px;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 4px;
+        }
+        .sub-text {
+            font-size: 12px;
+            color: #555;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .empty-state {
+            padding: 40px 0;
+            text-align: center;
+            color: #444;
+            font-style: italic;
+        }
+
+    </style>
 </head>
 <body>
-<div class="container">
-<div class="header">
-    <h1>📊 Usage Statistics</h1>
-    <a href="/dashboard" class="back-btn">
-        <span>←</span>
-        <span>Back to Dashboard</span>
-    </a>
-</div>
 
-<div id="content">
-    <div class="loading">Loading usage data...</div>
-</div>
-</div>
+    <div class="hud-header">
+        <a href="/dashboard" class="brand">CLAUDE_PROXY // METRICS</a>
+        <button onclick="window.location.href='/dashboard'">EXIT DASHBOARD</button>
+    </div>
 
-<script>
-async function loadUsage() {
-    try {
-        const [copilotRes, antigravityRes] = await Promise.all([
-            fetch('http://localhost:4141/usage').catch(() => null),
-            fetch('http://localhost:8081/health').catch(() => null)
-        ]);
+    <div id="container" class="container">
+        <div style="grid-column: 1/-1; text-align: center; color: #444; margin-top: 50px;">
+            INITIALIZING DATA STREAMS...
+        </div>
+    </div>
 
-        const content = document.getElementById('content');
-        let html = '<div class="usage-grid">';
+    <script>
+        // Auth handling
+        const urlParams = new URLSearchParams(window.location.search);
+        let apiKey = urlParams.get('key') || localStorage.getItem('proxy_key');
 
-        // Copilot Usage
-        if (copilotRes && copilotRes.ok) {
-            const copilot = await copilotRes.json();
-            const premium = copilot.quota_snapshots.premium_interactions;
-            const remaining = Math.floor(premium.remaining);
-            const total = premium.entitlement;
-            const used = total - remaining;
-            const percent = premium.percent_remaining;
-            
-            let progressClass = '';
-            if (percent < 20) progressClass = 'danger';
-            else if (percent < 50) progressClass = 'warning';
-
-            html += `
-            <div class="usage-card">
-                <div class="usage-header">
-                    <div class="usage-title">🤖 GitHub Copilot</div>
-                    <div class="usage-badge active">Active</div>
-                </div>
-                
-                <div class="quota-label">Premium Interactions</div>
-                <div class="quota-value">${remaining}</div>
-                <div class="quota-total">of ${total} remaining</div>
-                
-                <div class="progress-bar">
-                    <div class="progress-fill ${progressClass}" style="width: ${percent}%"></div>
-                </div>
-                
-                <div class="stat-row">
-                    <span class="stat-label">Used</span>
-                    <span class="stat-value">${used} interactions</span>
-                </div>
-                <div class="stat-row">
-                    <span class="stat-label">Percentage Used</span>
-                    <span class="stat-value">${(100 - percent).toFixed(1)}%</span>
-                </div>
-                <div class="stat-row">
-                    <span class="stat-label">Reset Date</span>
-                    <span class="stat-value">${copilot.quota_reset_date}</span>
-                </div>
-                <div class="stat-row">
-                    <span class="stat-label">Plan</span>
-                    <span class="stat-value">${copilot.copilot_plan}</span>
-                </div>
-            </div>`;
-        } else {
-            html += `
-            <div class="usage-card">
-                <div class="usage-header">
-                    <div class="usage-title">🤖 GitHub Copilot</div>
-                    <div class="usage-badge inactive">Offline</div>
-                </div>
-                <div class="empty-state">Copilot API not responding</div>
-            </div>`;
+        if (urlParams.get('key')) {
+            localStorage.setItem('proxy_key', urlParams.get('key'));
         }
 
-        // Antigravity Usage
-        if (antigravityRes && antigravityRes.ok) {
-            html += `
-            <div class="usage-card">
-                <div class="usage-header">
-                    <div class="usage-title">🌌 Antigravity</div>
-                    <div class="usage-badge active">Active</div>
-                </div>
-                <div class="stat-row">
-                    <span class="stat-label">Status</span>
-                    <span class="stat-value">Operational</span>
-                </div>
-                <div class="stat-row">
-                    <span class="stat-label">Type</span>
-                    <span class="stat-value">Unlimited (Google Accounts)</span>
-                </div>
-                <div class="stat-row">
-                    <span class="stat-label">Port</span>
-                    <span class="stat-value">8081</span>
-                </div>
-            </div>`;
-        } else {
-            html += `
-            <div class="usage-card">
-                <div class="usage-header">
-                    <div class="usage-title">🌌 Antigravity</div>
-                    <div class="usage-badge inactive">Offline</div>
-                </div>
-                <div class="empty-state">Antigravity not responding</div>
-            </div>`;
+        function getHeaders() {
+            const headers = {};
+            if (apiKey) headers['x-proxy-key'] = apiKey;
+            return headers;
         }
 
-        // Anthropic Usage
-        html += `
-        <div class="usage-card">
-            <div class="usage-header">
-                <div class="usage-title">🧠 Anthropic</div>
-                <div class="usage-badge active">Active</div>
-            </div>
-            <div class="stat-row">
-                <span class="stat-label">Type</span>
-                <span class="stat-value">Official API</span>
-            </div>
-            <div class="stat-row">
-                <span class="stat-label">Authentication</span>
-                <span class="stat-value">OAuth Token</span>
-            </div>
-            <div class="empty-state" style="margin-top: 15px;">Usage tracked by Anthropic directly</div>
-        </div>`;
+        async function handleAuthError(response) {
+            if (response.status === 401) {
+                if (!window.authPromptShown) {
+                    window.authPromptShown = true;
+                    const newKey = prompt("ACCESS DENIED // ENTER KEY:");
+                    if (newKey) {
+                        apiKey = newKey;
+                        localStorage.setItem('proxy_key', newKey);
+                        window.location.reload();
+                    }
+                }
+                throw new Error("Auth Failed");
+            }
+            return response;
+        }
 
-        html += '</div>';
-        content.innerHTML = html;
+        async function loadUsage() {
+            try {
+                const [copilotRes, antigravityRes] = await Promise.all([
+                    fetch('/api/copilot/usage', { headers: getHeaders() }).then(handleAuthError).catch(() => null),
+                    fetch('/api/antigravity/health', { headers: getHeaders() }).then(handleAuthError).catch(() => null)
+                ]);
 
-    } catch (error) {
-        document.getElementById('content').innerHTML = `
-            <div class="error">Failed to load usage data: ${error.message}</div>
-        `;
-    }
-}
+                const container = document.getElementById('container');
+                let html = '';
 
-loadUsage();
-setInterval(loadUsage, 30000);
-</script>
+                // 1. COPILOT
+                if (copilotRes && copilotRes.ok) {
+                    const data = await copilotRes.json();
+                    const premium = data.quota_snapshots.premium_interactions;
+                    const remaining = Math.floor(premium.remaining);
+                    const total = premium.entitlement;
+                    const percent = premium.percent_remaining;
+
+                    let pClass = '';
+                    if (percent < 20) pClass = 'danger';
+                    else if (percent < 50) pClass = 'warn';
+
+                    html += `
+                        <div class="card" style="border-top: 2px solid #fff">
+                            <div class="card-header">
+                                <div class="card-title">GITHUB COPILOT</div>
+                                <div class="status-dot active"></div>
+                            </div>
+
+                            <div class="quota-display">
+                                <div class="big-number">${remaining}</div>
+                                <div class="sub-text">Interactions Remaining</div>
+                            </div>
+
+                            <div class="progress-container">
+                                <div class="progress-bar ${pClass}" style="width: ${percent}%"></div>
+                            </div>
+
+                            <div class="stat-row">
+                                <span class="stat-label">PLAN</span>
+                                <span class="stat-value">${data.copilot_plan || 'UNKNOWN'}</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-label">RESET DATE</span>
+                                <span class="stat-value">${data.quota_reset_date || 'UNKNOWN'}</span>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    html += `
+                        <div class="card" style="opacity:0.5">
+                            <div class="card-header">
+                                <div class="card-title">GITHUB COPILOT</div>
+                                <div class="status-dot inactive"></div>
+                            </div>
+                            <div class="empty-state">OFFLINE / UNCONFIGURED</div>
+                        </div>
+                    `;
+                }
+
+                // 2. ANTIGRAVITY
+                if (antigravityRes && antigravityRes.ok) {
+                    html += `
+                        <div class="card" style="border-top: 2px solid var(--haiku)">
+                            <div class="card-header">
+                                <div class="card-title" style="color:var(--haiku)">ANTIGRAVITY</div>
+                                <div class="status-dot active"></div>
+                            </div>
+
+                            <div class="quota-display">
+                                <div class="big-number" style="color:var(--haiku)">∞</div>
+                                <div class="sub-text">Z.AI PROTOCOL</div>
+                            </div>
+
+                            <div class="progress-container">
+                                <div class="progress-bar" style="width: 100%; background: var(--haiku)"></div>
+                            </div>
+
+                            <div class="stat-row">
+                                <span class="stat-label">STATUS</span>
+                                <span class="stat-value" style="color:var(--haiku)">OPERATIONAL</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-label">PORT</span>
+                                <span class="stat-value">8081</span>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    html += `
+                        <div class="card" style="opacity:0.5">
+                            <div class="card-header">
+                                <div class="card-title">ANTIGRAVITY</div>
+                                <div class="status-dot inactive"></div>
+                            </div>
+                            <div class="empty-state">SERVICE OFFLINE</div>
+                        </div>
+                    `;
+                }
+
+                // 3. ANTHROPIC
+                html += `
+                    <div class="card" style="border-top: 2px solid var(--sonnet)">
+                        <div class="card-header">
+                            <div class="card-title" style="color:var(--sonnet)">ANTHROPIC</div>
+                            <div class="status-dot active"></div>
+                        </div>
+
+                        <div class="quota-display">
+                            <div class="big-number" style="color:var(--sonnet)">API</div>
+                            <div class="sub-text">DIRECT CONNECTION</div>
+                        </div>
+
+                        <div class="progress-container">
+                            <div class="progress-bar" style="width: 100%; background: var(--sonnet); opacity: 0.3"></div>
+                        </div>
+
+                        <div class="stat-row">
+                            <span class="stat-label">AUTH</span>
+                            <span class="stat-value">OAUTH 2.0</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">TRACKING</span>
+                            <span class="stat-value">EXTERNAL</span>
+                        </div>
+                    </div>
+                `;
+
+                container.innerHTML = html;
+
+            } catch (e) {
+                document.getElementById('container').innerHTML = `<div class="empty-state" style="color:var(--error)">ERROR: ${e.message}</div>`;
+            }
+        }
+
+        loadUsage();
+        setInterval(loadUsage, 10000);
+    </script>
 </body>
 </html>

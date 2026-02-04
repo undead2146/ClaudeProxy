@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Usage - Direct</title>
+<style>
+body { font-family: system-ui; background: #1a1a2e; color: #eee; padding: 20px; }
+.card { background: #16213e; border-radius: 8px; padding: 20px; margin: 10px 0; }
+pre { background: #0f3460; padding: 10px; border-radius: 4px; overflow-x: auto; }
+</style>
+</head>
+<body>
+<h1>📊 Usage (Direct API)</h1>
+<div id="content">Loading...</div>
+
+<script>
+const SERVER_IP = '192.168.1.16';
+
+async function loadData() {
+    const content = document.getElementById('content');
+    let html = '';
+
+    try {
+        // Copilot
+        const copilotRes = await fetch(`http://${SERVER_IP}:4141/usage`);
+        if (copilotRes.ok) {
+            const data = await copilotRes.json();
+            const premium = data.quota_snapshots.premium_interactions;
+            html += `<div class="card">
+                <h2>🤖 GitHub Copilot</h2>
+                <p><strong>Premium:</strong> ${Math.floor(premium.remaining)} / ${premium.entitlement} (${premium.percent_remaining.toFixed(1)}%)</p>
+                <p><strong>Plan:</strong> ${data.copilot_plan}</p>
+                <p><strong>Resets:</strong> ${data.quota_reset_date}</p>
+            </div>`;
+        } else {
+            html += '<div class="card"><h2>🤖 Copilot</h2><p>Offline</p></div>';
+        }
+
+        // Antigravity
+        const antiRes = await fetch(`http://${SERVER_IP}:8081/health`);
+        if (antiRes.ok) {
+            const data = await antiRes.json();
+            html += `<div class="card">
+                <h2>🌌 Antigravity</h2>
+                <p><strong>Status:</strong> ${data.status}</p>
+                <p><strong>Accounts:</strong> ${data.counts.total} total, ${data.counts.available} available</p>
+            </div>`;
+        } else {
+            html += '<div class="card"><h2>🌌 Antigravity</h2><p>Offline</p></div>';
+        }
+
+    } catch (e) {
+        html += `<div class="card"><p>Error: ${e.message}</p></div>`;
+    }
+
+    content.innerHTML = html;
+}
+
+loadData();
+setInterval(loadData, 30000);
+</script>
+</body>
+</html>

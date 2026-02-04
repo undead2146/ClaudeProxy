@@ -1,9 +1,9 @@
 {
-  "sonnet_provider": "glm",
-  "haiku_provider": "glm",
-  "opus_provider": "copilot",
-  "sonnet_model": "glm-4.7",
-  "haiku_model": "glm-4.7",
+  "sonnet_provider": "enowdev",
+  "haiku_provider": "enowdev",
+  "opus_provider": "enowdev",
+  "sonnet_model": "claude-sonnet-4.5",
+  "haiku_model": "claude-sonnet-4.5-thinking",
   "opus_model": "claude-opus-4.5",
-  "last_updated": "2026-01-23T20:51:39.349996"
+  "last_updated": "2026-02-04T02:34:00.120103"
 }
