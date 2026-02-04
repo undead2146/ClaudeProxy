@@ -2,11 +2,11 @@
 .SYNOPSIS
     Switch Claude Code Proxy providers dynamically
 .DESCRIPTION
-    Easily switch between providers (antigravity, glm, anthropic, copilot) without restarting
+    Easily switch between providers (antigravity, zai, anthropic, copilot) without restarting
 .PARAMETER Tier
     The model tier to configure: sonnet, haiku, opus, or all
 .PARAMETER Provider
-    The provider to use: antigravity, glm, anthropic, copilot
+    The provider to use: antigravity, zai, anthropic, copilot
 .EXAMPLE
     .\switch-provider.ps1 -Tier sonnet -Provider copilot
 .EXAMPLE
@@ -19,7 +19,7 @@ param(
     [string]$Tier,
     
     [Parameter(Mandatory=$true)]
-    [ValidateSet('antigravity', 'glm', 'anthropic', 'copilot')]
+    [ValidateSet('antigravity', 'zai', 'anthropic', 'copilot', 'glm')]
     [string]$Provider
 )
 
