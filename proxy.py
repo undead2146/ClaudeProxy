@@ -151,6 +151,10 @@ from collections import deque
 log_buffer = deque(maxlen=100)
 log_buffer_lock = threading.Lock()
 
+# Import token tracker
+from token_tracker import TokenUsageTracker
+token_tracker = TokenUsageTracker()
+
 # OAuth refresh lock to prevent concurrent refresh attempts
 oauth_refresh_lock = threading.Lock()
 
@@ -213,13 +217,6 @@ CUSTOM_PROVIDER_BASE_URL = os.getenv("CUSTOM_PROVIDER_BASE_URL")
 CUSTOM_PROVIDER_SONNET_MODEL = os.getenv("CUSTOM_PROVIDER_SONNET_MODEL", "claude-sonnet-4.5")
 CUSTOM_PROVIDER_HAIKU_MODEL = os.getenv("CUSTOM_PROVIDER_HAIKU_MODEL", "claude-haiku-4.5")
 CUSTOM_PROVIDER_OPUS_MODEL = os.getenv("CUSTOM_PROVIDER_OPUS_MODEL", "claude-opus-4.5")
-
-# Enowdev provider configuration - OpenAI-compatible API
-ENOWDEV_API_KEY = os.getenv("ENOWDEV_API_KEY")
-ENOWDEV_BASE_URL = os.getenv("ENOWDEV_BASE_URL", "https://api.enowdev.id/v1")
-ENOWDEV_SONNET_MODEL = os.getenv("ENOWDEV_SONNET_MODEL", "claude-sonnet-4.5")
-ENOWDEV_HAIKU_MODEL = os.getenv("ENOWDEV_HAIKU_MODEL", "claude-haiku-4.5")
-ENOWDEV_OPUS_MODEL = os.getenv("ENOWDEV_OPUS_MODEL", "claude-opus-4.5")
 
 ANTHROPIC_BASE_URL = "https://api.anthropic.com"
 REQUEST_TIMEOUT = 300.0
@@ -419,9 +416,6 @@ def get_provider_config(model: str) -> Tuple[Optional[str], Optional[str], str, 
         elif current_sonnet_provider == "openrouter" and OPENROUTER_API_KEY:
             logger.info(f"[Proxy] Routing Sonnet  OpenRouter ({OPENROUTER_SONNET_MODEL})")
             return OPENROUTER_API_KEY, OPENROUTER_BASE_URL, tier, OPENROUTER_SONNET_MODEL, "openrouter"
-        elif current_sonnet_provider == "enowdev" and ENOWDEV_API_KEY and ENOWDEV_BASE_URL:
-            logger.info(f"[Proxy] Routing Sonnet  Enowdev ({ENOWDEV_SONNET_MODEL})")
-            return ENOWDEV_API_KEY, ENOWDEV_BASE_URL, tier, ENOWDEV_SONNET_MODEL, "enowdev"
         elif current_sonnet_provider == "custom" and CUSTOM_PROVIDER_API_KEY and CUSTOM_PROVIDER_BASE_URL:
             logger.info(f"[Proxy] Routing Sonnet  Custom Provider ({CUSTOM_PROVIDER_SONNET_MODEL})")
             return CUSTOM_PROVIDER_API_KEY, CUSTOM_PROVIDER_BASE_URL, tier, CUSTOM_PROVIDER_SONNET_MODEL, "custom"
@@ -444,9 +438,6 @@ def get_provider_config(model: str) -> Tuple[Optional[str], Optional[str], str, 
         elif current_haiku_provider == "openrouter" and OPENROUTER_API_KEY:
             logger.info(f"[Proxy] Routing Haiku  OpenRouter ({OPENROUTER_HAIKU_MODEL})")
             return OPENROUTER_API_KEY, OPENROUTER_BASE_URL, tier, OPENROUTER_HAIKU_MODEL, "openrouter"
-        elif current_haiku_provider == "enowdev" and ENOWDEV_API_KEY and ENOWDEV_BASE_URL:
-            logger.info(f"[Proxy] Routing Haiku  Enowdev ({ENOWDEV_HAIKU_MODEL})")
-            return ENOWDEV_API_KEY, ENOWDEV_BASE_URL, tier, ENOWDEV_HAIKU_MODEL, "enowdev"
         elif current_haiku_provider == "custom" and CUSTOM_PROVIDER_API_KEY and CUSTOM_PROVIDER_BASE_URL:
             logger.info(f"[Proxy] Routing Haiku  Custom Provider ({CUSTOM_PROVIDER_HAIKU_MODEL})")
             return CUSTOM_PROVIDER_API_KEY, CUSTOM_PROVIDER_BASE_URL, tier, CUSTOM_PROVIDER_HAIKU_MODEL, "custom"
@@ -469,9 +460,6 @@ def get_provider_config(model: str) -> Tuple[Optional[str], Optional[str], str, 
         elif current_opus_provider == "openrouter" and OPENROUTER_API_KEY:
             logger.info(f"[Proxy] Routing Opus  OpenRouter ({OPENROUTER_OPUS_MODEL})")
             return OPENROUTER_API_KEY, OPENROUTER_BASE_URL, tier, OPENROUTER_OPUS_MODEL, "openrouter"
-        elif current_opus_provider == "enowdev" and ENOWDEV_API_KEY and ENOWDEV_BASE_URL:
-            logger.info(f"[Proxy] Routing Opus  Enowdev ({ENOWDEV_OPUS_MODEL})")
-            return ENOWDEV_API_KEY, ENOWDEV_BASE_URL, tier, ENOWDEV_OPUS_MODEL, "enowdev"
         elif current_opus_provider == "custom" and CUSTOM_PROVIDER_API_KEY and CUSTOM_PROVIDER_BASE_URL:
             logger.info(f"[Proxy] Routing Opus  Custom Provider ({CUSTOM_PROVIDER_OPUS_MODEL})")
             return CUSTOM_PROVIDER_API_KEY, CUSTOM_PROVIDER_BASE_URL, tier, CUSTOM_PROVIDER_OPUS_MODEL, "custom"
@@ -603,11 +591,26 @@ async def proxy_to_antigravity(body_json: dict, original_headers: dict, endpoint
             else:
                 response = await client.post(target_url, headers=target_headers, content=request_body)
                 logger.info(f"[Antigravity] Response status: {response.status_code}")
-                
+
                 if response.status_code >= 400:
                     error_text = response.text[:500]
                     logger.error(f"[Antigravity] Error response: {error_text}")
-                
+                else:
+                    # Track token usage for successful responses
+                    try:
+                        response_data = response.json()
+                        usage = response_data.get("usage", {})
+                        if usage:
+                            token_tracker.record_usage(
+                                input_tokens=usage.get("input_tokens", 0),
+                                output_tokens=usage.get("output_tokens", 0),
+                                provider="antigravity",
+                                model=body_json.get("model", "unknown"),
+                                tier="unknown"
+                            )
+                    except Exception as e:
+                        logger.warning(f"[TokenTracker] Failed to record usage: {e}")
+
                 return JSONResponse(
                     content=response.json(),
                     status_code=response.status_code,
@@ -671,7 +674,22 @@ async def proxy_to_copilot(body_json: dict, original_headers: dict, endpoint: st
                         status_code=response.status_code,
                         headers={k: v for k, v in response.headers.items() if k.lower() not in ['content-encoding', 'content-length', 'transfer-encoding']},
                     )
-                
+
+                # Track token usage for successful responses
+                try:
+                    response_data = response.json()
+                    usage = response_data.get("usage", {})
+                    if usage:
+                        token_tracker.record_usage(
+                            input_tokens=usage.get("input_tokens", 0),
+                            output_tokens=usage.get("output_tokens", 0),
+                            provider="copilot",
+                            model=body_json.get("model", "unknown"),
+                            tier="unknown"
+                        )
+                except Exception as e:
+                    logger.warning(f"[TokenTracker] Failed to record usage: {e}")
+
                 return JSONResponse(
                     content=response.json(),
                     status_code=response.status_code,
@@ -742,6 +760,21 @@ async def proxy_to_openrouter(body_json: dict, original_headers: dict, endpoint:
                         status_code=response.status_code,
                         headers={k: v for k, v in response.headers.items() if k.lower() not in ['content-encoding', 'content-length', 'transfer-encoding']},
                     )
+
+                # Track token usage for successful responses
+                try:
+                    response_data = response.json()
+                    usage = response_data.get("usage", {})
+                    if usage:
+                        token_tracker.record_usage(
+                            input_tokens=usage.get("input_tokens", 0),
+                            output_tokens=usage.get("output_tokens", 0),
+                            provider="openrouter",
+                            model=body_json.get("model", "unknown"),
+                            tier="unknown"
+                        )
+                except Exception as e:
+                    logger.warning(f"[TokenTracker] Failed to record usage: {e}")
 
                 return JSONResponse(
                     content=response.json(),
@@ -818,6 +851,21 @@ async def proxy_to_custom(body_json: dict, original_headers: dict, endpoint: str
                         headers={k: v for k, v in response.headers.items() if k.lower() not in ['content-encoding', 'content-length', 'transfer-encoding']},
                     )
 
+                # Track token usage for successful responses
+                try:
+                    response_data = response.json()
+                    usage = response_data.get("usage", {})
+                    if usage:
+                        token_tracker.record_usage(
+                            input_tokens=usage.get("input_tokens", 0),
+                            output_tokens=usage.get("output_tokens", 0),
+                            provider="custom",
+                            model=body_json.get("model", "unknown"),
+                            tier="unknown"
+                        )
+                except Exception as e:
+                    logger.warning(f"[TokenTracker] Failed to record usage: {e}")
+
                 return JSONResponse(
                     content=response.json(),
                     status_code=response.status_code,
@@ -831,89 +879,6 @@ async def proxy_to_custom(body_json: dict, original_headers: dict, endpoint: str
         }, status_code=504)
     except Exception as e:
         logger.error(f"[Custom] Error: {type(e).__name__}: {e}")
-        return JSONResponse(content={"error": str(e)}, status_code=500)
-
-
-async def proxy_to_enowdev(body_json: dict, original_headers: dict, endpoint: str) -> JSONResponse | StreamingResponse:
-    """Proxy request to Enowdev OpenAI-compatible API."""
-    try:
-        # Convert Anthropic format to OpenAI format
-        openai_body = convert_anthropic_to_openai(body_json)
-        
-        target_url = f"{ENOWDEV_BASE_URL}/chat/completions"
-        target_headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {ENOWDEV_API_KEY}",
-        }
-
-        logger.info(f"[Enowdev] Sending to {target_url}")
-        logger.info(f"[Enowdev] Model: {openai_body.get('model')}")
-        logger.info(f"[Enowdev] Messages count: {len(openai_body.get('messages', []))}")
-        
-        # Log tool results for debugging
-        for msg in openai_body.get('messages', []):
-            if msg.get('role') == 'tool':
-                content_preview = str(msg.get('content', ''))[:200]
-                logger.info(f"[Enowdev] Tool result: {content_preview}")
-
-        request_body = json.dumps(openai_body).encode('utf-8')
-
-        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
-            stream = openai_body.get("stream", False)
-
-            if stream:
-                response = await client.post(target_url, headers=target_headers, content=request_body)
-                logger.info(f"[Enowdev] Response status: {response.status_code}")
-
-                async def stream_response():
-                    async for chunk in response.aiter_bytes():
-                        # Convert OpenAI SSE format to Anthropic SSE format
-                        yield convert_openai_stream_to_anthropic(chunk)
-
-                filtered_headers = {k: v for k, v in response.headers.items()
-                                    if k.lower() not in ['content-encoding', 'content-length', 'transfer-encoding']}
-
-                return StreamingResponse(
-                    stream_response(),
-                    status_code=response.status_code,
-                    headers=filtered_headers,
-                    media_type="text/event-stream",
-                )
-            else:
-                response = await client.post(target_url, headers=target_headers, content=request_body)
-                logger.info(f"[Enowdev] Response status: {response.status_code}")
-
-                if response.status_code != 200:
-                    logger.error(f"[Enowdev] Error: {response.text[:500]}")
-                    # Return the error response so the model sees it failed
-                    error_body = {"error": {"type": "api_error", "message": response.text[:500]}}
-                    try:
-                        error_body = response.json()
-                    except:
-                        pass
-                    return JSONResponse(
-                        content=error_body,
-                        status_code=response.status_code,
-                        headers={k: v for k, v in response.headers.items() if k.lower() not in ['content-encoding', 'content-length', 'transfer-encoding']},
-                    )
-
-                # Convert OpenAI response to Anthropic format
-                openai_response = response.json()
-                anthropic_response = convert_openai_to_anthropic(openai_response)
-
-                return JSONResponse(
-                    content=anthropic_response,
-                    status_code=response.status_code,
-                    headers={k: v for k, v in response.headers.items() if k.lower() not in ['content-encoding', 'content-length', 'transfer-encoding']},
-                )
-
-    except httpx.TimeoutException:
-        logger.error(f"[Enowdev] Timeout after {REQUEST_TIMEOUT}s")
-        return JSONResponse(content={
-            "error": "Enowdev API timeout"
-        }, status_code=504)
-    except Exception as e:
-        logger.error(f"[Enowdev] Error: {type(e).__name__}: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
@@ -1285,11 +1250,6 @@ async def proxy_request(request: Request, endpoint: str) -> JSONResponse | Strea
             logger.info(f"[Proxy] {original_model}  Custom Provider ({translated_model})")
             return await proxy_to_custom(body_json, original_headers, endpoint)
 
-        # Route to Enowdev provider
-        elif provider_type == "enowdev":
-            logger.info(f"[Proxy] {original_model}  Enowdev ({translated_model})")
-            return await proxy_to_enowdev(body_json, original_headers, endpoint)
-
         # Route to Z.AI provider
         elif api_key and base_url and provider_type in ["glm", "zai"]:
             # Alternative provider (Z.AI) - pass through as-is
@@ -1388,6 +1348,21 @@ async def proxy_request(request: Request, endpoint: str) -> JSONResponse | Strea
                     ]
                     logger.info(f"[Proxy] Stripped thinking blocks from response")
 
+                # Track token usage for successful responses
+                try:
+                    usage = response_json.get("usage", {})
+                    if usage:
+                        provider_name = "zai" if provider_type in ["glm", "zai"] else "anthropic" if use_real_anthropic else provider_type
+                        token_tracker.record_usage(
+                            input_tokens=usage.get("input_tokens", 0),
+                            output_tokens=usage.get("output_tokens", 0),
+                            provider=provider_name,
+                            model=translated_model,
+                            tier=tier
+                        )
+                except Exception as e:
+                    logger.warning(f"[TokenTracker] Failed to record usage: {e}")
+
                 return JSONResponse(
                     content=response_json,
                     status_code=response.status_code,
@@ -1446,9 +1421,9 @@ async def health_check(request: Request):
                 "status": antigravity_status,
                 "port": ANTIGRAVITY_PORT,
                 "models": {
-                    "sonnet": ANTIGRAVITY_SONNET_MODEL if SONNET_PROVIDER == "antigravity" else None,
-                    "haiku": ANTIGRAVITY_HAIKU_MODEL if HAIKU_PROVIDER == "antigravity" else None,
-                    "opus": ANTIGRAVITY_OPUS_MODEL if OPUS_PROVIDER == "antigravity" else None,
+                    "sonnet": ANTIGRAVITY_SONNET_MODEL if get_sonnet_provider() == "antigravity" else None,
+                    "haiku": ANTIGRAVITY_HAIKU_MODEL if get_haiku_provider() == "antigravity" else None,
+                    "opus": ANTIGRAVITY_OPUS_MODEL if get_opus_provider() == "antigravity" else None,
                 }
             }
         },
@@ -1733,13 +1708,34 @@ async def logs_page_endpoint(request: Request):
 
 async def usage_page_endpoint(request: Request):
     """Serve dedicated usage statistics page."""
-    usage_html_path = os.path.join(os.path.dirname(__file__), 'usage.html')
+    usage_html_path = os.path.join(os.path.dirname(__file__), 'usage-stats.html')
     if os.path.exists(usage_html_path):
         with open(usage_html_path, 'r', encoding='utf-8') as f:
             html = f.read()
         return HTMLResponse(content=html)
     else:
         return HTMLResponse(content="<html><body><h1>Usage page not found</h1></body></html>", status_code=404)
+
+
+async def get_usage_stats_endpoint(request: Request):
+    """Get token usage statistics."""
+    try:
+        stats = token_tracker.get_usage_stats()
+        return JSONResponse(content=stats)
+    except Exception as e:
+        logger.error(f"[Usage] Failed to get stats: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+async def reset_usage_stats_endpoint(request: Request):
+    """Reset token usage statistics."""
+    try:
+        token_tracker.reset_stats()
+        logger.info("[Usage] Statistics reset")
+        return JSONResponse(content={"status": "success", "message": "Statistics reset successfully"})
+    except Exception as e:
+        logger.error(f"[Usage] Failed to reset stats: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
 async def test_antigravity_endpoint(request: Request):
@@ -1818,6 +1814,8 @@ routes = [
     Route("/logs/clear", clear_logs_endpoint, methods=["POST"]),
     Route("/logs.html", logs_page_endpoint, methods=["GET"]),
     Route("/usage", usage_page_endpoint, methods=["GET"]),
+    Route("/api/usage/stats", get_usage_stats_endpoint, methods=["GET"]),
+    Route("/api/usage/reset", reset_usage_stats_endpoint, methods=["POST"]),
     Route("/api/copilot/usage", copilot_usage_proxy, methods=["GET"]),
     Route("/api/antigravity/health", antigravity_health_proxy, methods=["GET"]),
     Route("/test-antigravity", test_antigravity_endpoint, methods=["GET"]),

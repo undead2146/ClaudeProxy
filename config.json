@@ -1,9 +1,9 @@
 {
-  "sonnet_provider": "enowdev",
-  "haiku_provider": "enowdev",
-  "opus_provider": "enowdev",
+  "sonnet_provider": "custom",
+  "haiku_provider": "custom",
+  "opus_provider": "custom",
   "sonnet_model": "claude-sonnet-4.5",
-  "haiku_model": "claude-sonnet-4.5-thinking",
-  "opus_model": "claude-opus-4.5",
-  "last_updated": "2026-02-04T02:34:00.120103"
+  "haiku_model": "claude-sonnet-4.5",
+  "opus_model": "claude-sonnet-4.5",
+  "last_updated": "2026-02-05T04:33:12.453141"
 }

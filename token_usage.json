@@ -1,0 +1,65 @@
+{
+  "total": {
+    "input_tokens": 6069182,
+    "output_tokens": 19718,
+    "total_tokens": 6088900,
+    "requests": 317
+  },
+  "by_provider": {
+    "custom": {
+      "input_tokens": 6069182,
+      "output_tokens": 19718,
+      "total_tokens": 6088900,
+      "requests": 317
+    }
+  },
+  "by_model": {
+    "claude-haiku-4.5": {
+      "input_tokens": 1402470,
+      "output_tokens": 16765,
+      "total_tokens": 1419235,
+      "requests": 260,
+      "provider": "custom",
+      "tier": "unknown"
+    },
+    "claude-sonnet-4.5": {
+      "input_tokens": 4666712,
+      "output_tokens": 2953,
+      "total_tokens": 4669665,
+      "requests": 57,
+      "provider": "custom",
+      "tier": "unknown"
+    }
+  },
+  "by_date": {
+    "2026-02-05": {
+      "input_tokens": 6069182,
+      "output_tokens": 19718,
+      "total_tokens": 6088900,
+      "requests": 317,
+      "by_provider": {
+        "custom": {
+          "input_tokens": 6069182,
+          "output_tokens": 19718,
+          "total_tokens": 6088900,
+          "requests": 317
+        }
+      },
+      "by_model": {
+        "claude-haiku-4.5": {
+          "input_tokens": 1402470,
+          "output_tokens": 16765,
+          "total_tokens": 1419235,
+          "requests": 260
+        },
+        "claude-sonnet-4.5": {
+          "input_tokens": 4666712,
+          "output_tokens": 2953,
+          "total_tokens": 4669665,
+          "requests": 57
+        }
+      }
+    }
+  },
+  "last_updated": "2026-02-05T04:55:19.602062"
+}
