@@ -51,3 +51,13 @@ Thumbs.db
 *.swp
 *.swo
 token_usage.json
+
+# Cloudflare Tunnel
+cloudflared.exe
+tunnel.log
+TUNNEL_URL.txt
+
+# Tunnel scripts (user-specific)
+start-tunnel.bat
+stop-tunnel.bat
+tunnel-*.bat
