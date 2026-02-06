@@ -228,6 +228,35 @@ antigravity_process = None
 _last_oauth_refresh_failure = 0
 _OAUTH_REFRESH_COOLDOWN = 60  # seconds - wait before retrying failed refresh
 
+
+def build_custom_provider_models() -> list:
+    """Build the custom provider models list from environment variables."""
+    models = []
+
+    # Read directly from environment to get latest values
+    sonnet_model = os.getenv("CUSTOM_PROVIDER_SONNET_MODEL", "claude-sonnet-4.5")
+    haiku_model = os.getenv("CUSTOM_PROVIDER_HAIKU_MODEL", "claude-haiku-4.5")
+    opus_model = os.getenv("CUSTOM_PROVIDER_OPUS_MODEL", "claude-opus-4.5")
+
+    # Add configured models if they have values
+    if sonnet_model:
+        models.append(sonnet_model)
+    if haiku_model:
+        models.append(haiku_model)
+    if opus_model:
+        models.append(opus_model)
+
+    # Deduplicate while preserving order
+    seen = set()
+    unique_models = []
+    for model in models:
+        if model not in seen:
+            seen.add(model)
+            unique_models.append(model)
+
+    return unique_models
+
+
 def get_oauth_token():
     """Read OAuth token from Claude Code's credentials file, refreshing if needed."""
     global _last_oauth_refresh_failure
@@ -416,9 +445,14 @@ def get_provider_config(model: str) -> Tuple[Optional[str], Optional[str], str, 
         elif current_sonnet_provider == "openrouter" and OPENROUTER_API_KEY:
             logger.info(f"[Proxy] Routing Sonnet  OpenRouter ({OPENROUTER_SONNET_MODEL})")
             return OPENROUTER_API_KEY, OPENROUTER_BASE_URL, tier, OPENROUTER_SONNET_MODEL, "openrouter"
-        elif current_sonnet_provider == "custom" and CUSTOM_PROVIDER_API_KEY and CUSTOM_PROVIDER_BASE_URL:
-            logger.info(f"[Proxy] Routing Sonnet  Custom Provider ({CUSTOM_PROVIDER_SONNET_MODEL})")
-            return CUSTOM_PROVIDER_API_KEY, CUSTOM_PROVIDER_BASE_URL, tier, CUSTOM_PROVIDER_SONNET_MODEL, "custom"
+        elif current_sonnet_provider == "custom":
+            # Read directly from environment to get latest values
+            custom_api_key = os.getenv("CUSTOM_PROVIDER_API_KEY")
+            custom_base_url = os.getenv("CUSTOM_PROVIDER_BASE_URL")
+            custom_sonnet_model = os.getenv("CUSTOM_PROVIDER_SONNET_MODEL", "claude-sonnet-4.5")
+            if custom_api_key and custom_base_url:
+                logger.info(f"[Proxy] Routing Sonnet  Custom Provider ({custom_sonnet_model})")
+                return custom_api_key, custom_base_url, tier, custom_sonnet_model, "custom"
         else:
             logger.info(f"[Proxy] Routing Sonnet  Anthropic (OAuth)")
             # For Anthropic, always use a real Claude model name (translate short names to full IDs)
@@ -438,9 +472,14 @@ def get_provider_config(model: str) -> Tuple[Optional[str], Optional[str], str, 
         elif current_haiku_provider == "openrouter" and OPENROUTER_API_KEY:
             logger.info(f"[Proxy] Routing Haiku  OpenRouter ({OPENROUTER_HAIKU_MODEL})")
             return OPENROUTER_API_KEY, OPENROUTER_BASE_URL, tier, OPENROUTER_HAIKU_MODEL, "openrouter"
-        elif current_haiku_provider == "custom" and CUSTOM_PROVIDER_API_KEY and CUSTOM_PROVIDER_BASE_URL:
-            logger.info(f"[Proxy] Routing Haiku  Custom Provider ({CUSTOM_PROVIDER_HAIKU_MODEL})")
-            return CUSTOM_PROVIDER_API_KEY, CUSTOM_PROVIDER_BASE_URL, tier, CUSTOM_PROVIDER_HAIKU_MODEL, "custom"
+        elif current_haiku_provider == "custom":
+            # Read directly from environment to get latest values
+            custom_api_key = os.getenv("CUSTOM_PROVIDER_API_KEY")
+            custom_base_url = os.getenv("CUSTOM_PROVIDER_BASE_URL")
+            custom_haiku_model = os.getenv("CUSTOM_PROVIDER_HAIKU_MODEL", "claude-haiku-4.5")
+            if custom_api_key and custom_base_url:
+                logger.info(f"[Proxy] Routing Haiku  Custom Provider ({custom_haiku_model})")
+                return custom_api_key, custom_base_url, tier, custom_haiku_model, "custom"
         else:
             logger.info(f"[Proxy] Routing Haiku  Anthropic (OAuth)")
             # For Anthropic, always use a real Claude model name (translate short names to full IDs)
@@ -460,9 +499,14 @@ def get_provider_config(model: str) -> Tuple[Optional[str], Optional[str], str, 
         elif current_opus_provider == "openrouter" and OPENROUTER_API_KEY:
             logger.info(f"[Proxy] Routing Opus  OpenRouter ({OPENROUTER_OPUS_MODEL})")
             return OPENROUTER_API_KEY, OPENROUTER_BASE_URL, tier, OPENROUTER_OPUS_MODEL, "openrouter"
-        elif current_opus_provider == "custom" and CUSTOM_PROVIDER_API_KEY and CUSTOM_PROVIDER_BASE_URL:
-            logger.info(f"[Proxy] Routing Opus  Custom Provider ({CUSTOM_PROVIDER_OPUS_MODEL})")
-            return CUSTOM_PROVIDER_API_KEY, CUSTOM_PROVIDER_BASE_URL, tier, CUSTOM_PROVIDER_OPUS_MODEL, "custom"
+        elif current_opus_provider == "custom":
+            # Read directly from environment to get latest values
+            custom_api_key = os.getenv("CUSTOM_PROVIDER_API_KEY")
+            custom_base_url = os.getenv("CUSTOM_PROVIDER_BASE_URL")
+            custom_opus_model = os.getenv("CUSTOM_PROVIDER_OPUS_MODEL", "claude-opus-4.5")
+            if custom_api_key and custom_base_url:
+                logger.info(f"[Proxy] Routing Opus  Custom Provider ({custom_opus_model})")
+                return custom_api_key, custom_base_url, tier, custom_opus_model, "custom"
         else:
             logger.info(f"[Proxy] Routing Opus  Anthropic (OAuth)")
             # For Anthropic, always use a real Claude model name (translate short names to full IDs)
@@ -1469,14 +1513,16 @@ async def get_config_endpoint(request: Request):
     with config_lock:
         config_copy = runtime_config.copy()
     
-    # Add provider availability info
+    # Add provider availability info (read from env for custom provider to get latest)
+    custom_api_key = os.getenv("CUSTOM_PROVIDER_API_KEY")
+    custom_base_url = os.getenv("CUSTOM_PROVIDER_BASE_URL")
     providers_available = {
         "antigravity": ANTIGRAVITY_ENABLED,
         "zai": bool(ZAI_HAIKU_MODEL or ZAI_SONNET_MODEL or ZAI_OPUS_MODEL),
         "anthropic": has_oauth_credentials(),
         "copilot": ENABLE_COPILOT,
         "openrouter": bool(OPENROUTER_API_KEY),
-        "custom": bool(CUSTOM_PROVIDER_API_KEY and CUSTOM_PROVIDER_BASE_URL)
+        "custom": bool(custom_api_key and custom_base_url)
     }
 
     # Available models per provider
@@ -1526,12 +1572,7 @@ async def get_config_endpoint(request: Request):
             "deepseek/deepseek-chat",
             "meta-llama/llama-3.3-70b"
         ],
-        "custom": [
-            "claude-sonnet-4.5",
-            "claude-haiku-4.5",
-            "claude-opus-4.5",
-            "claude-sonnet-4.5-thinking"
-        ]
+        "custom": build_custom_provider_models()
     }
     
     return JSONResponse(content={

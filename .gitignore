@@ -54,10 +54,6 @@ token_usage.json
 
 # Cloudflare Tunnel
 cloudflared.exe
+cloudflared
 tunnel.log
 TUNNEL_URL.txt
-
-# Tunnel scripts (user-specific)
-start-tunnel.bat
-stop-tunnel.bat
-tunnel-*.bat
