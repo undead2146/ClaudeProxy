@@ -940,110 +940,52 @@ def _sanitize_for_custom_provider(body_json: dict) -> None:
 
 
 
-def _truncate_content_blocks(messages: list, max_chars: int = 200, skip_last: int = 10) -> None:
-    """Truncate large content blocks in messages, preserving recent ones.
+def sanitize_for_custom(body_json: dict) -> bytes:
+    """Sanitize and serialize request body for custom providers.
 
-    Replaces large tool_result outputs and text blocks with previews,
-    keeping the conversation structure intact (the model still sees that
-    a tool was called and what the first 200 chars of output were).
+    Strips non-standard Anthropic fields that custom providers reject.
+    NEVER drops, truncates, or modifies any messages — all context is preserved.
     """
-    target = messages[:-skip_last] if len(messages) > skip_last else messages
-    for msg in target:
-        if not isinstance(msg.get('content'), list):
-            continue
-        for block in msg['content']:
-            btype = block.get('type', '')
-            if btype == 'tool_result':
-                if isinstance(block.get('content'), list):
-                    for sub in block['content']:
-                        if sub.get('type') == 'text' and len(sub.get('text', '')) > max_chars:
-                            sub['text'] = sub['text'][:max_chars] + '\n...[truncated]'
-                elif isinstance(block.get('content'), str) and len(block['content']) > max_chars:
-                    block['content'] = block['content'][:max_chars] + '\n...[truncated]'
-            elif btype == 'text' and len(block.get('text', '')) > max_chars * 5:
-                block['text'] = block['text'][:max_chars * 5] + '\n...[truncated]'
-
-
-def fit_messages_to_limit(body_json: dict, max_kb: int = 100) -> bytes:
-    """Adapt request payload to fit within custom provider size limits.
-
-    Strategy (ordered by how much context is preserved):
-      1. Strip unsupported params (cache_control, metadata, etc.)
-      2. Truncate large content blocks in older messages (keep 200-char previews)
-      3. Truncate ALL content blocks including recent ones
-      4. Sliding window: keep first 6 msgs (task context) + last N msgs,
-         drop the middle (completed work the model no longer needs)
-    """
-    # Phase 1: Deep-sanitize — strip ALL non-standard fields from every level
     _sanitize_for_custom_provider(body_json)
-
     request_body = json.dumps(body_json, ensure_ascii=False).encode('utf-8')
-    if len(request_body) <= max_kb * 1024 or 'messages' not in body_json:
-        return request_body
 
-    messages = body_json['messages']
-    original_size = len(request_body)
-    original_count = len(messages)
-
-    # Phase 2: Truncate large blocks in older messages (keep last 10 untouched)
-    _truncate_content_blocks(messages, max_chars=200, skip_last=10)
-    request_body = json.dumps(body_json, ensure_ascii=False).encode('utf-8')
-    if len(request_body) <= max_kb * 1024:
-        logger.info(f"[Custom] Phase 2 trimmed: {original_size/1024:.0f}KB → {len(request_body)/1024:.0f}KB (all {original_count} msgs kept)")
-        return request_body
-
-    # Phase 3: Truncate ALL blocks including recent ones
-    _truncate_content_blocks(messages, max_chars=200, skip_last=0)
-    request_body = json.dumps(body_json, ensure_ascii=False).encode('utf-8')
-    if len(request_body) <= max_kb * 1024:
-        logger.info(f"[Custom] Phase 3 trimmed: {original_size/1024:.0f}KB → {len(request_body)/1024:.0f}KB (all {original_count} msgs kept)")
-        return request_body
-
-    # Phase 4: Sliding window — keep first messages (task context) + last messages (active work)
-    # Drop the MIDDLE of the conversation (completed work), not the beginning
-    KEEP_FIRST = 6  # Task assignment, initial instructions
-    if len(messages) > KEEP_FIRST + 4:
-        head = messages[:KEEP_FIRST]
-        # Figure out how many tail messages we can keep
-        tail_start = KEEP_FIRST
-        while tail_start < len(messages) - 2:
-            test_msgs = head + messages[tail_start:]
-            body_json['messages'] = test_msgs
-            test_body = json.dumps(body_json, ensure_ascii=False).encode('utf-8')
-            if len(test_body) <= max_kb * 1024:
-                request_body = test_body
-                dropped = original_count - len(test_msgs)
-                logger.info(
-                    f"[Custom] Sliding window: {original_size/1024:.0f}KB → {len(request_body)/1024:.0f}KB "
-                    f"(kept first {KEEP_FIRST} + last {len(messages[tail_start:])} msgs, dropped {dropped} middle msgs)"
-                )
-                return request_body
-            tail_start += 2  # Drop 2 more from middle each iteration
-
-    # Phase 5: absolute emergency — just keep last messages that fit
-    body_json['messages'] = messages
-    while len(messages) > 2 and len(request_body) > max_kb * 1024:
-        messages.pop(0)
-        while messages and messages[0].get('role') != 'user':
-            messages.pop(0)
-        request_body = json.dumps(body_json, ensure_ascii=False).encode('utf-8')
-
+    # Diagnostic: log size breakdown so we can identify what's large
+    system_size = len(json.dumps(body_json.get('system', ''), ensure_ascii=False))
+    tools_size = len(json.dumps(body_json.get('tools', []), ensure_ascii=False))
+    msgs = body_json.get('messages', [])
+    msgs_size = len(json.dumps(msgs, ensure_ascii=False))
     logger.info(
-        f"[Custom] Emergency trim: {original_size/1024:.0f}KB → {len(request_body)/1024:.0f}KB "
-        f"({original_count} → {len(messages)} msgs)"
+        f"[Custom] Payload breakdown: total={len(request_body)/1024:.0f}KB "
+        f"(system={system_size/1024:.0f}KB, tools={tools_size/1024:.0f}KB, "
+        f"messages={msgs_size/1024:.0f}KB [{len(msgs)} msgs])"
     )
     return request_body
 
 
 
 
+
+def _fix_tool_input(obj: dict) -> bool:
+    """Fix a single tool_use input if it's a string. Returns True if fixed."""
+    if obj.get('type') == 'tool_use' and isinstance(obj.get('input'), str):
+        raw = obj['input'].strip()
+        if raw:
+            try:
+                parsed = json.loads(raw)
+                obj['input'] = parsed if isinstance(parsed, dict) else {}
+            except json.JSONDecodeError:
+                obj['input'] = {}
+        else:
+            obj['input'] = {}
+        return True
+    return False
+
+
 def fix_streaming_tool_inputs(raw_body: bytes) -> bytes:
     """Fix tool_use blocks in SSE responses where 'input' is a string instead of a dict.
 
-    Some Anthropic-compatible providers accumulate streaming tool inputs
-    incorrectly, returning them as JSON strings rather than parsed objects.
-    Claude Code stores these in conversation history and rejects them
-    on the next turn. This parses them into proper dicts in the response stream.
+    Scans ALL event types (content_block, delta, message.content[])
+    for malformed inputs, not just content_block_start events.
     """
     text = raw_body.decode('utf-8', errors='replace')
     lines = text.split('\n')
@@ -1056,16 +998,24 @@ def fix_streaming_tool_inputs(raw_body: bytes) -> bytes:
             continue
         try:
             event = json.loads(line[6:])
-            block = event.get('content_block') or {}
-            if block.get('type') == 'tool_use' and isinstance(block.get('input'), str):
-                raw_input = block['input']
-                if raw_input.strip():
-                    try:
-                        parsed = json.loads(raw_input)
-                        block['input'] = parsed if isinstance(parsed, dict) else {}
-                    except json.JSONDecodeError:
-                        block['input'] = {}
-                    fix_count += 1
+
+            # Check content_block (content_block_start events)
+            block = event.get('content_block')
+            if isinstance(block, dict) and _fix_tool_input(block):
+                fix_count += 1
+
+            # Check delta (content_block_delta events)
+            delta = event.get('delta')
+            if isinstance(delta, dict) and _fix_tool_input(delta):
+                fix_count += 1
+
+            # Check message.content[] (message_start with full content)
+            message = event.get('message')
+            if isinstance(message, dict) and isinstance(message.get('content'), list):
+                for cb in message['content']:
+                    if isinstance(cb, dict) and _fix_tool_input(cb):
+                        fix_count += 1
+
             output.append('data: ' + json.dumps(event))
         except (json.JSONDecodeError, Exception):
             output.append(line)
@@ -1102,7 +1052,7 @@ async def proxy_to_custom(body_json: dict, original_headers: dict, endpoint: str
         logger.info(f"[Custom] Sending to {target_url}")
         logger.info(f"[Custom] Model: {body_json.get('model')}")
 
-        request_body = fit_messages_to_limit(body_json)
+        request_body = sanitize_for_custom(body_json)
         logger.info(f"[Custom] Request body size: {len(request_body)/1024:.1f}KB")
 
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
