@@ -460,9 +460,9 @@ def get_provider_config(model: str) -> Tuple[Optional[str], Optional[str], str, 
                 logger.info(f"[Proxy] Routing Sonnet  Custom Provider ({custom_sonnet_model})")
                 return custom_api_key, custom_base_url, tier, custom_sonnet_model, "custom"
         else:
-            logger.info(f"[Proxy] Routing Sonnet  Anthropic (OAuth)")
-            # For Anthropic, always use a real Claude model name (translate short names to full IDs)
-            return None, None, tier, ANTHROPIC_SONNET_MODEL, "anthropic"
+            logger.info(f"[Proxy] Routing Sonnet → Anthropic (OAuth) using original model: {model}")
+            # Pass through the original model name from Claude Code - it already has the correct ID
+            return None, None, tier, model, "anthropic"
 
     elif tier == "Haiku":
         if current_haiku_provider == "antigravity" and ANTIGRAVITY_ENABLED:
@@ -486,9 +486,9 @@ def get_provider_config(model: str) -> Tuple[Optional[str], Optional[str], str, 
                 logger.info(f"[Proxy] Routing Haiku  Custom Provider ({custom_haiku_model})")
                 return custom_api_key, custom_base_url, tier, custom_haiku_model, "custom"
         else:
-            logger.info(f"[Proxy] Routing Haiku  Anthropic (OAuth)")
-            # For Anthropic, always use a real Claude model name (translate short names to full IDs)
-            return None, None, tier, ANTHROPIC_HAIKU_MODEL, "anthropic"
+            logger.info(f"[Proxy] Routing Haiku → Anthropic (OAuth) using original model: {model}")
+            # Pass through the original model name from Claude Code - it already has the correct ID
+            return None, None, tier, model, "anthropic"
 
     elif tier == "Opus":
         if current_opus_provider == "antigravity" and ANTIGRAVITY_ENABLED:
@@ -512,9 +512,9 @@ def get_provider_config(model: str) -> Tuple[Optional[str], Optional[str], str, 
                 logger.info(f"[Proxy] Routing Opus  Custom Provider ({custom_opus_model})")
                 return custom_api_key, custom_base_url, tier, custom_opus_model, "custom"
         else:
-            logger.info(f"[Proxy] Routing Opus  Anthropic (OAuth)")
-            # For Anthropic, always use a real Claude model name (translate short names to full IDs)
-            return None, None, tier, ANTHROPIC_OPUS_MODEL, "anthropic"
+            logger.info(f"[Proxy] Routing Opus → Anthropic (OAuth) using original model: {model}")
+            # Pass through the original model name from Claude Code - it already has the correct ID
+            return None, None, tier, model, "anthropic"
 
     # Unknown model - try to infer or default to Anthropic
     logger.warning(f"[Proxy] Unknown model tier for '{model}', defaulting to Haiku tier")
@@ -558,11 +558,37 @@ def has_thinking_in_beta(beta_header: str) -> bool:
     """Check if thinking is enabled in beta features."""
     if not beta_header:
         return False
+    return "thinking" in beta_header.lower()
 
-    thinking_keywords = ['thinking', 'extended-thinking', 'interleaved-thinking']
-    features_lower = beta_header.lower()
 
-    return any(keyword in features_lower for keyword in thinking_keywords)
+def is_reasoning_model(model: str, provider_type: str) -> bool:
+    """Check if the model supports reasoning features (thinking/adaptive-thinking)."""
+    # Antigravity (Gemini) and custom providers do not support thinking headers
+    if provider_type in ("antigravity", "custom"):
+        return False
+
+    # Reasoning features are only supported on specific models
+    # Typically Sonnet 3.7+ and Sonnet/Opus 4.5+
+    # Note: Opus 4.6 (claude-opus-4-20250514) explicitly does NOT support it yet as of user report
+    return any(m in model.lower() for m in ["sonnet-3-7", "sonnet-4-5", "claude-3-7", "opus-4-5"])
+
+
+def filter_beta_header(beta_header: str, model: str, provider_type: str) -> str:
+    """Filter incompatible beta features based on the model and provider."""
+    if not beta_header:
+        return ""
+
+    beta_parts = [part.strip() for part in beta_header.split(',')]
+
+    if not is_reasoning_model(model, provider_type):
+        original_len = len(beta_parts)
+        # Strip both 'thinking' and 'effort' related features
+        beta_parts = [part for part in beta_parts
+                      if 'thinking' not in part.lower() and 'effort' not in part.lower()]
+        if len(beta_parts) != original_len:
+            logger.info(f"[Proxy] Stripped reasoning beta features for non-reasoning model/provider: {model} ({provider_type})")
+
+    return ','.join(beta_parts)
 
 
 async def proxy_to_antigravity(body_json: dict, original_headers: dict, endpoint: str) -> JSONResponse | StreamingResponse:
@@ -589,18 +615,14 @@ async def proxy_to_antigravity(body_json: dict, original_headers: dict, endpoint
             content_preview = str(first_msg.get('content', ''))[:100]
             logger.info(f"[Antigravity] First message role: {first_msg.get('role')}, content preview: {content_preview}")
 
-        # Forward beta features header BUT strip thinking features (Gemini doesn't support them)
+        # Forward beta features header BUT strip incompatible features
         if "anthropic-beta" in original_headers:
-            beta_header = original_headers["anthropic-beta"]
-            # Remove thinking-related features
-            beta_parts = [part.strip() for part in beta_header.split(',')]
-            filtered_parts = [part for part in beta_parts if 'thinking' not in part.lower()]
-
-            if filtered_parts:
-                target_headers["anthropic-beta"] = ','.join(filtered_parts)
+            filtered_beta = filter_beta_header(original_headers["anthropic-beta"], body_json.get('model', ''), "antigravity")
+            if filtered_beta:
+                target_headers["anthropic-beta"] = filtered_beta
                 logger.info(f"[Antigravity] Beta header (filtered): {target_headers['anthropic-beta']}")
             else:
-                logger.info(f"[Antigravity] All beta features filtered out (thinking not supported)")
+                logger.info(f"[Antigravity] All beta features filtered out or none relevant")
 
         # Thinking blocks already stripped centrally in proxy_request
 
@@ -676,9 +698,11 @@ async def proxy_to_copilot(body_json: dict, original_headers: dict, endpoint: st
         }
 
         # Copy Anthropic headers
-        for header in ["anthropic-version", "anthropic-beta"]:
-            if header in original_headers:
-                target_headers[header] = original_headers[header]
+        if "anthropic-version" in original_headers:
+            target_headers["anthropic-version"] = original_headers["anthropic-version"]
+
+        if "anthropic-beta" in original_headers:
+            target_headers["anthropic-beta"] = filter_beta_header(original_headers["anthropic-beta"], body_json.get('model', ''), "copilot")
 
         logger.info(f"[Copilot] Sending to {target_url}")
         logger.info(f"[Copilot] Model: {body_json.get('model')}")
@@ -757,9 +781,11 @@ async def proxy_to_openrouter(body_json: dict, original_headers: dict, endpoint:
         }
 
         # Copy Anthropic headers that OpenRouter supports
-        for header in ["anthropic-version", "anthropic-beta"]:
-            if header in original_headers:
-                target_headers[header] = original_headers[header]
+        if "anthropic-version" in original_headers:
+            target_headers["anthropic-version"] = original_headers["anthropic-version"]
+
+        if "anthropic-beta" in original_headers:
+            target_headers["anthropic-beta"] = filter_beta_header(original_headers["anthropic-beta"], body_json.get('model', ''), "openrouter")
 
         logger.info(f"[OpenRouter] Sending to {target_url}")
         logger.info(f"[OpenRouter] Model: {body_json.get('model')}")
@@ -831,6 +857,73 @@ async def proxy_to_openrouter(body_json: dict, original_headers: dict, endpoint:
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
+def fit_messages_to_limit(body_json: dict, max_kb: int = 100) -> bytes:
+    """Serialize request body, dropping oldest messages if payload exceeds provider limit.
+
+    Some providers (e.g. enowX) reject payloads over a certain size.
+    This trims conversation history from the front to fit, preserving
+    the most recent context and ensuring the first message has role 'user'.
+    """
+    request_body = json.dumps(body_json).encode('utf-8')
+    if len(request_body) <= max_kb * 1024 or 'messages' not in body_json:
+        return request_body
+
+    messages = body_json['messages']
+    original_size = len(request_body)
+    original_count = len(messages)
+
+    while len(messages) > 4 and len(request_body) > max_kb * 1024:
+        messages.pop(0)
+        while messages and messages[0].get('role') != 'user':
+            messages.pop(0)
+        request_body = json.dumps(body_json).encode('utf-8')
+
+    logger.info(
+        f"[Custom] Adapted payload to provider limit: "
+        f"{original_size/1024:.0f}KB → {len(request_body)/1024:.0f}KB "
+        f"({original_count} → {len(messages)} messages)"
+    )
+    return request_body
+
+
+def fix_streaming_tool_inputs(raw_body: bytes) -> bytes:
+    """Fix tool_use blocks in SSE responses where 'input' is a string instead of a dict.
+
+    Some Anthropic-compatible providers accumulate streaming tool inputs
+    incorrectly, returning them as JSON strings rather than parsed objects.
+    Claude Code stores these in conversation history and rejects them
+    on the next turn. This parses them into proper dicts in the response stream.
+    """
+    text = raw_body.decode('utf-8', errors='replace')
+    lines = text.split('\n')
+    output = []
+    fix_count = 0
+
+    for line in lines:
+        if not line.startswith('data: ') or line.strip() == 'data: [DONE]':
+            output.append(line)
+            continue
+        try:
+            event = json.loads(line[6:])
+            block = event.get('content_block') or {}
+            if block.get('type') == 'tool_use' and isinstance(block.get('input'), str):
+                raw_input = block['input']
+                if raw_input.strip():
+                    try:
+                        parsed = json.loads(raw_input)
+                        block['input'] = parsed if isinstance(parsed, dict) else {}
+                    except json.JSONDecodeError:
+                        block['input'] = {}
+                    fix_count += 1
+            output.append('data: ' + json.dumps(event))
+        except (json.JSONDecodeError, Exception):
+            output.append(line)
+
+    if fix_count:
+        logger.info(f"[Custom] Fixed {fix_count} malformed tool_use inputs in response stream")
+    return '\n'.join(output).encode('utf-8')
+
+
 async def proxy_to_custom(body_json: dict, original_headers: dict, endpoint: str) -> JSONResponse | StreamingResponse:
     """Proxy request to custom Anthropic-compatible API."""
     try:
@@ -849,14 +942,17 @@ async def proxy_to_custom(body_json: dict, original_headers: dict, endpoint: str
         }
 
         # Copy Anthropic headers
-        for header in ["anthropic-version", "anthropic-beta"]:
-            if header in original_headers:
-                target_headers[header] = original_headers[header]
+        if "anthropic-version" in original_headers:
+            target_headers["anthropic-version"] = original_headers["anthropic-version"]
+
+        if "anthropic-beta" in original_headers:
+            target_headers["anthropic-beta"] = filter_beta_header(original_headers["anthropic-beta"], body_json.get('model', ''), "custom")
 
         logger.info(f"[Custom] Sending to {target_url}")
         logger.info(f"[Custom] Model: {body_json.get('model')}")
 
-        request_body = json.dumps(body_json).encode('utf-8')
+        request_body = fit_messages_to_limit(body_json)
+        logger.info(f"[Custom] Request body size: {len(request_body)/1024:.1f}KB")
 
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
             stream = body_json.get("stream", False)
@@ -865,9 +961,13 @@ async def proxy_to_custom(body_json: dict, original_headers: dict, endpoint: str
                 response = await client.post(target_url, headers=target_headers, content=request_body)
                 logger.info(f"[Custom] Response status: {response.status_code}")
 
+                if response.status_code != 200:
+                    logger.error(f"[Custom] Error response: {response.text[:500]}")
+
+                response_body = fix_streaming_tool_inputs(response.content)
+
                 async def stream_response():
-                    async for chunk in response.aiter_bytes():
-                        yield chunk
+                    yield response_body
 
                 filtered_headers = {k: v for k, v in response.headers.items()
                                     if k.lower() not in ['content-encoding', 'content-length', 'transfer-encoding']}
@@ -1258,20 +1358,28 @@ async def proxy_request(request: Request, endpoint: str) -> JSONResponse | Strea
 
         api_key, base_url, tier, translated_model, provider_type = get_provider_config(original_model)
 
-        # Strip thinking blocks from ALL messages before routing to any provider.
-        # Thinking blocks accumulate in conversation history and can bloat payloads
-        # to 150+ KB, causing upstream APIs to reject them as malformed.
+        # Strip thinking/redacted_thinking blocks from ALL messages before routing.
+        # These accumulate in conversation history and can bloat payloads massively.
         if 'messages' in body_json:
             original_size = len(json.dumps(body_json))
             for message in body_json['messages']:
                 if isinstance(message.get('content'), list):
                     message['content'] = [
                         block for block in message['content']
-                        if block.get('type') != 'thinking'
+                        if block.get('type') not in ('thinking', 'redacted_thinking')
                     ]
             stripped_size = len(json.dumps(body_json))
             if original_size != stripped_size:
                 logger.info(f"[Proxy] Stripped thinking blocks: {original_size/1024:.1f}KB → {stripped_size/1024:.1f}KB")
+
+        # Strip reasoning parameters from request body for non-reasoning models/providers
+        if not is_reasoning_model(translated_model, provider_type):
+            if 'thinking' in body_json:
+                del body_json['thinking']
+                logger.info(f"[Proxy] Stripped 'thinking' parameter from request body (model: {translated_model})")
+            if 'effort' in body_json:
+                del body_json['effort']
+                logger.info(f"[Proxy] Stripped 'effort' parameter from request body (model: {translated_model})")
 
         # Strip [1m] suffix from model name - it's internal notation, not part of actual API model names
         if "[1m]" in translated_model:
@@ -1341,10 +1449,12 @@ async def proxy_request(request: Request, endpoint: str) -> JSONResponse | Strea
             if "anthropic-version" in original_headers:
                 target_headers["anthropic-version"] = original_headers["anthropic-version"]
 
-            # Pass through beta header as-is
+            # Pass through filtered beta header
             if "anthropic-beta" in original_headers:
-                target_headers["anthropic-beta"] = original_headers["anthropic-beta"]
-                logger.info(f"[Proxy] Forwarding beta: {original_headers['anthropic-beta']}")
+                filtered_beta = filter_beta_header(original_headers["anthropic-beta"], translated_model, "anthropic")
+                if filtered_beta:
+                    target_headers["anthropic-beta"] = filtered_beta
+                    logger.info(f"[Proxy] Forwarding beta: {filtered_beta}")
 
             # Thinking blocks already stripped centrally above
             request_body = json.dumps(body_json).encode('utf-8')
