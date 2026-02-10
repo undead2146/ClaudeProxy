@@ -872,8 +872,10 @@ def fit_messages_to_limit(body_json: dict, max_kb: int = 100) -> bytes:
     original_size = len(request_body)
     original_count = len(messages)
 
-    while len(messages) > 4 and len(request_body) > max_kb * 1024:
+    # Keep dropping oldest messages until under limit (minimum 2 messages to preserve structure)
+    while len(messages) > 2 and len(request_body) > max_kb * 1024:
         messages.pop(0)
+        # Ensure first message is always 'user' role
         while messages and messages[0].get('role') != 'user':
             messages.pop(0)
         request_body = json.dumps(body_json).encode('utf-8')
