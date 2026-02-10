@@ -602,15 +602,7 @@ async def proxy_to_antigravity(body_json: dict, original_headers: dict, endpoint
             else:
                 logger.info(f"[Antigravity] All beta features filtered out (thinking not supported)")
 
-        # Also strip thinking from messages
-        if 'messages' in body_json:
-            for message in body_json['messages']:
-                if isinstance(message.get('content'), list):
-                    # Remove thinking content blocks
-                    message['content'] = [
-                        block for block in message['content']
-                        if block.get('type') != 'thinking'
-                    ]
+        # Thinking blocks already stripped centrally in proxy_request
 
         request_body = json.dumps(body_json).encode('utf-8')
 
@@ -1266,6 +1258,21 @@ async def proxy_request(request: Request, endpoint: str) -> JSONResponse | Strea
 
         api_key, base_url, tier, translated_model, provider_type = get_provider_config(original_model)
 
+        # Strip thinking blocks from ALL messages before routing to any provider.
+        # Thinking blocks accumulate in conversation history and can bloat payloads
+        # to 150+ KB, causing upstream APIs to reject them as malformed.
+        if 'messages' in body_json:
+            original_size = len(json.dumps(body_json))
+            for message in body_json['messages']:
+                if isinstance(message.get('content'), list):
+                    message['content'] = [
+                        block for block in message['content']
+                        if block.get('type') != 'thinking'
+                    ]
+            stripped_size = len(json.dumps(body_json))
+            if original_size != stripped_size:
+                logger.info(f"[Proxy] Stripped thinking blocks: {original_size/1024:.1f}KB → {stripped_size/1024:.1f}KB")
+
         # Strip [1m] suffix from model name - it's internal notation, not part of actual API model names
         if "[1m]" in translated_model:
             translated_model = translated_model.replace("[1m]", "")
@@ -1339,8 +1346,7 @@ async def proxy_request(request: Request, endpoint: str) -> JSONResponse | Strea
                 target_headers["anthropic-beta"] = original_headers["anthropic-beta"]
                 logger.info(f"[Proxy] Forwarding beta: {original_headers['anthropic-beta']}")
 
-            # Remove thinking blocks since thinking is disabled
-            body_json = fix_thinking_blocks(body_json, has_thinking_beta=False, use_real_anthropic=True)
+            # Thinking blocks already stripped centrally above
             request_body = json.dumps(body_json).encode('utf-8')
 
         # Make the request
