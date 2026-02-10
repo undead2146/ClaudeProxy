@@ -98,7 +98,8 @@ function Start-Proxy {
     }
 
     Write-Host "[Proxy] Starting server..." -ForegroundColor Cyan
-    Push-Location $proxyRoot
+    $serverDir = Join-Path $proxyRoot "server"
+    Push-Location $serverDir
     $process = Start-Process python -ArgumentList "proxy.py" -WindowStyle Hidden -PassThru
     $process.Id | Out-File $pidFile
     Pop-Location

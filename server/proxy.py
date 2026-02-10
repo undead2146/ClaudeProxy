@@ -218,8 +218,14 @@ CUSTOM_PROVIDER_SONNET_MODEL = os.getenv("CUSTOM_PROVIDER_SONNET_MODEL", "claude
 CUSTOM_PROVIDER_HAIKU_MODEL = os.getenv("CUSTOM_PROVIDER_HAIKU_MODEL", "claude-haiku-4.5")
 CUSTOM_PROVIDER_OPUS_MODEL = os.getenv("CUSTOM_PROVIDER_OPUS_MODEL", "claude-opus-4.5")
 
-ANTHROPIC_BASE_URL = "https://api.anthropic.com"
-REQUEST_TIMEOUT = 300.0
+# Anthropic (OAuth) Default Model Mappings
+ANTHROPIC_SONNET_MODEL = os.getenv("ANTHROPIC_SONNET_MODEL", "claude-sonnet-4-5-20250929")
+ANTHROPIC_HAIKU_MODEL = os.getenv("ANTHROPIC_HAIKU_MODEL", "claude-3-5-haiku-20241022")
+ANTHROPIC_OPUS_MODEL = os.getenv("ANTHROPIC_OPUS_MODEL", "claude-opus-4-20250514")
+
+ANTHROPIC_BASE_URL = os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
+PROXY_PORT = int(os.getenv("PROXY_PORT", "8082"))
+REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "300.0"))
 
 # Antigravity process handle
 antigravity_process = None
@@ -378,14 +384,14 @@ def has_oauth_credentials() -> bool:
 
 def get_provider_config(model: str) -> Tuple[Optional[str], Optional[str], str, str, str]:
     """Determine which provider to use based on model name.
-    
+
     Returns: (api_key, base_url, tier, translated_model, provider_type)
     provider_type can be: 'glm', 'antigravity', 'anthropic', or 'unknown'
     """
     # Detect tier from model name
     tier = "Unknown"
     model_lower = model.lower()
-    
+
     # First, check if model matches any configured model names
     if ZAI_HAIKU_MODEL and model == ZAI_HAIKU_MODEL:
         tier = "Haiku"
@@ -419,18 +425,18 @@ def get_provider_config(model: str) -> Tuple[Optional[str], Optional[str], str, 
             tier = "Haiku"
         else:
             tier = "Sonnet"
-    
+
     # Get current provider configuration (thread-safe)
     current_sonnet_provider = get_sonnet_provider()
     current_haiku_provider = get_haiku_provider()
     current_opus_provider = get_opus_provider()
-    
+
     # Get selected models from runtime config
     with config_lock:
         sonnet_model = runtime_config.get("sonnet_model", ANTIGRAVITY_SONNET_MODEL)
         haiku_model = runtime_config.get("haiku_model", ANTIGRAVITY_HAIKU_MODEL)
         opus_model = runtime_config.get("opus_model", ANTIGRAVITY_OPUS_MODEL)
-    
+
     # Route based on configured provider for this tier
     if tier == "Sonnet":
         if current_sonnet_provider == "antigravity" and ANTIGRAVITY_ENABLED:
@@ -456,8 +462,7 @@ def get_provider_config(model: str) -> Tuple[Optional[str], Optional[str], str, 
         else:
             logger.info(f"[Proxy] Routing Sonnet  Anthropic (OAuth)")
             # For Anthropic, always use a real Claude model name (translate short names to full IDs)
-            real_model = "claude-sonnet-4-5-20250929"
-            return None, None, tier, real_model, "anthropic"
+            return None, None, tier, ANTHROPIC_SONNET_MODEL, "anthropic"
 
     elif tier == "Haiku":
         if current_haiku_provider == "antigravity" and ANTIGRAVITY_ENABLED:
@@ -483,8 +488,7 @@ def get_provider_config(model: str) -> Tuple[Optional[str], Optional[str], str, 
         else:
             logger.info(f"[Proxy] Routing Haiku  Anthropic (OAuth)")
             # For Anthropic, always use a real Claude model name (translate short names to full IDs)
-            real_model = "claude-3-5-haiku-20241022"
-            return None, None, tier, real_model, "anthropic"
+            return None, None, tier, ANTHROPIC_HAIKU_MODEL, "anthropic"
 
     elif tier == "Opus":
         if current_opus_provider == "antigravity" and ANTIGRAVITY_ENABLED:
@@ -510,9 +514,8 @@ def get_provider_config(model: str) -> Tuple[Optional[str], Optional[str], str, 
         else:
             logger.info(f"[Proxy] Routing Opus  Anthropic (OAuth)")
             # For Anthropic, always use a real Claude model name (translate short names to full IDs)
-            real_model = "claude-opus-4-20250514"
-            return None, None, tier, real_model, "anthropic"
-    
+            return None, None, tier, ANTHROPIC_OPUS_MODEL, "anthropic"
+
     # Unknown model - try to infer or default to Anthropic
     logger.warning(f"[Proxy] Unknown model tier for '{model}', defaulting to Haiku tier")
     # Default to Haiku routing
@@ -524,7 +527,7 @@ def get_provider_config(model: str) -> Tuple[Optional[str], Optional[str], str, 
     elif current_haiku_provider == "copilot" and ENABLE_COPILOT:
         return None, GITHUB_COPILOT_BASE_URL, "Haiku", haiku_model, "copilot"
     else:
-        return None, None, "Unknown", "claude-3-5-haiku-20241022", "anthropic"
+        return None, None, "Unknown", ANTHROPIC_HAIKU_MODEL, "anthropic"
 
 def generate_signature(thinking_content: str) -> str:
     """Generate a valid signature for thinking block."""
@@ -555,10 +558,10 @@ def has_thinking_in_beta(beta_header: str) -> bool:
     """Check if thinking is enabled in beta features."""
     if not beta_header:
         return False
-    
+
     thinking_keywords = ['thinking', 'extended-thinking', 'interleaved-thinking']
     features_lower = beta_header.lower()
-    
+
     return any(keyword in features_lower for keyword in thinking_keywords)
 
 
@@ -571,34 +574,34 @@ async def proxy_to_antigravity(body_json: dict, original_headers: dict, endpoint
             "x-api-key": "test",
             "anthropic-version": "2023-06-01"
         }
-        
+
         # Log the exact request being sent
         logger.info(f"[Antigravity] Sending to {target_url}")
         logger.info(f"[Antigravity] Model in body: {body_json.get('model')}")
         logger.info(f"[Antigravity] Stream: {body_json.get('stream', False)}")
         logger.info(f"[Antigravity] Max tokens: {body_json.get('max_tokens', 'not set')}")
         logger.info(f"[Antigravity] Messages count: {len(body_json.get('messages', []))}")
-        
+
         # Log first message preview for debugging
         messages = body_json.get('messages', [])
         if messages:
             first_msg = messages[0]
             content_preview = str(first_msg.get('content', ''))[:100]
             logger.info(f"[Antigravity] First message role: {first_msg.get('role')}, content preview: {content_preview}")
-        
+
         # Forward beta features header BUT strip thinking features (Gemini doesn't support them)
         if "anthropic-beta" in original_headers:
             beta_header = original_headers["anthropic-beta"]
             # Remove thinking-related features
             beta_parts = [part.strip() for part in beta_header.split(',')]
             filtered_parts = [part for part in beta_parts if 'thinking' not in part.lower()]
-            
+
             if filtered_parts:
                 target_headers["anthropic-beta"] = ','.join(filtered_parts)
                 logger.info(f"[Antigravity] Beta header (filtered): {target_headers['anthropic-beta']}")
             else:
                 logger.info(f"[Antigravity] All beta features filtered out (thinking not supported)")
-        
+
         # Also strip thinking from messages
         if 'messages' in body_json:
             for message in body_json['messages']:
@@ -608,24 +611,24 @@ async def proxy_to_antigravity(body_json: dict, original_headers: dict, endpoint
                         block for block in message['content']
                         if block.get('type') != 'thinking'
                     ]
-        
+
         request_body = json.dumps(body_json).encode('utf-8')
-        
+
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
             stream = body_json.get("stream", False)
-            
+
             if stream:
                 response = await client.post(target_url, headers=target_headers, content=request_body)
                 logger.info(f"[Antigravity] Response status: {response.status_code}")
-                
+
                 if response.status_code >= 400:
                     error_text = response.text[:500]
                     logger.error(f"[Antigravity] Error response: {error_text}")
-                
+
                 async def stream_response():
                     async for chunk in response.aiter_bytes():
                         yield chunk
-                
+
                 return StreamingResponse(
                     stream_response(),
                     status_code=response.status_code,
@@ -679,28 +682,28 @@ async def proxy_to_copilot(body_json: dict, original_headers: dict, endpoint: st
             "Content-Type": "application/json",
             "Authorization": "Bearer dummy"  # copilot-api handles auth internally
         }
-        
+
         # Copy Anthropic headers
         for header in ["anthropic-version", "anthropic-beta"]:
             if header in original_headers:
                 target_headers[header] = original_headers[header]
-        
+
         logger.info(f"[Copilot] Sending to {target_url}")
         logger.info(f"[Copilot] Model: {body_json.get('model')}")
-        
+
         request_body = json.dumps(body_json).encode('utf-8')
-        
+
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
             stream = body_json.get("stream", False)
-            
+
             if stream:
                 response = await client.post(target_url, headers=target_headers, content=request_body)
                 logger.info(f"[Copilot] Response status: {response.status_code}")
-                
+
                 async def stream_response():
                     async for chunk in response.aiter_bytes():
                         yield chunk
-                
+
                 return StreamingResponse(
                     stream_response(),
                     status_code=response.status_code,
@@ -710,7 +713,7 @@ async def proxy_to_copilot(body_json: dict, original_headers: dict, endpoint: st
             else:
                 response = await client.post(target_url, headers=target_headers, content=request_body)
                 logger.info(f"[Copilot] Response status: {response.status_code}")
-                
+
                 if response.status_code != 200:
                     logger.error(f"[Copilot] Error: {response.text[:500]}")
                     return JSONResponse(
@@ -739,7 +742,7 @@ async def proxy_to_copilot(body_json: dict, original_headers: dict, endpoint: st
                     status_code=response.status_code,
                     headers={k: v for k, v in response.headers.items() if k.lower() not in ['content-encoding', 'content-length', 'transfer-encoding']},
                 )
-    
+
     except httpx.TimeoutException:
         logger.error(f"[Copilot] Timeout after {REQUEST_TIMEOUT}s")
         return JSONResponse(content={
@@ -842,12 +845,12 @@ async def proxy_to_custom(body_json: dict, original_headers: dict, endpoint: str
         # Check if base URL already includes /v1 or if we should skip it
         base_url = CUSTOM_PROVIDER_BASE_URL.rstrip('/') if CUSTOM_PROVIDER_BASE_URL else ""
         skip_v1 = os.getenv("CUSTOM_PROVIDER_SKIP_V1", "false").lower() == "true"
-        
+
         if skip_v1:
             target_url = f"{base_url}/{endpoint}"
         else:
             target_url = f"{base_url}/v1/{endpoint}"
-            
+
         target_headers = {
             "Content-Type": "application/json",
             "x-api-key": CUSTOM_PROVIDER_API_KEY,
@@ -933,7 +936,7 @@ def convert_anthropic_to_openai(anthropic_body: dict) -> dict:
         "messages": [],
         "stream": anthropic_body.get("stream", False),
     }
-    
+
     # Add optional parameters
     if "max_tokens" in anthropic_body:
         openai_body["max_tokens"] = anthropic_body["max_tokens"]
@@ -943,7 +946,7 @@ def convert_anthropic_to_openai(anthropic_body: dict) -> dict:
         openai_body["top_p"] = anthropic_body["top_p"]
     if "stop_sequences" in anthropic_body:
         openai_body["stop"] = anthropic_body["stop_sequences"]
-    
+
     # Convert tools if present
     if "tools" in anthropic_body:
         openai_body["tools"] = []
@@ -957,7 +960,7 @@ def convert_anthropic_to_openai(anthropic_body: dict) -> dict:
                 }
             })
         logger.info(f"[Convert] Converted {len(openai_body['tools'])} tools to OpenAI format")
-    
+
     # Convert system message
     if "system" in anthropic_body:
         if isinstance(anthropic_body["system"], str):
@@ -976,12 +979,12 @@ def convert_anthropic_to_openai(anthropic_body: dict) -> dict:
                     "role": "system",
                     "content": system_content
                 })
-    
+
     # Convert messages
     for msg in anthropic_body.get("messages", []):
         role = msg.get("role")
         content = msg.get("content")
-        
+
         if isinstance(content, str):
             openai_body["messages"].append({
                 "role": role,
@@ -992,7 +995,7 @@ def convert_anthropic_to_openai(anthropic_body: dict) -> dict:
             openai_content = []
             tool_calls = []
             has_tool_results = False
-            
+
             for block in content:
                 if block.get("type") == "text":
                     openai_content.append({
@@ -1024,7 +1027,7 @@ def convert_anthropic_to_openai(anthropic_body: dict) -> dict:
                     has_tool_results = True
                     # Tool results need to be separate messages in OpenAI format
                     content = block.get("content")
-                    
+
                     # Handle content that might be a list of blocks
                     if isinstance(content, list):
                         # Extract text from content blocks
@@ -1035,30 +1038,30 @@ def convert_anthropic_to_openai(anthropic_body: dict) -> dict:
                         content = "\n".join(text_parts) if text_parts else json.dumps(content)
                     elif not isinstance(content, str):
                         content = json.dumps(content)
-                    
+
                     # Preserve error information - if is_error is true, prepend ERROR marker
                     if block.get("is_error"):
                         content = f"ERROR: {content}"
-                    
+
                     openai_body["messages"].append({
                         "role": "tool",
                         "tool_call_id": block.get("tool_use_id"),
                         "content": content
                     })
-            
+
             # Don't add message if it only contained tool_results (already added above)
             if not has_tool_results:
                 msg_dict = {
                     "role": role,
                     "content": openai_content if len(openai_content) > 1 else (openai_content[0]["text"] if openai_content else "")
                 }
-                
+
                 # Add tool_calls if present (for assistant messages)
                 if tool_calls:
                     msg_dict["tool_calls"] = tool_calls
-                
+
                 openai_body["messages"].append(msg_dict)
-    
+
     return openai_body
 
 
@@ -1067,7 +1070,7 @@ def convert_openai_to_anthropic(openai_response: dict) -> dict:
     choice = openai_response.get("choices", [{}])[0]
     message = choice.get("message", {})
     finish_reason = choice.get("finish_reason")
-    
+
     # Map OpenAI finish reasons to Anthropic stop reasons
     stop_reason_map = {
         "stop": "end_turn",
@@ -1076,7 +1079,7 @@ def convert_openai_to_anthropic(openai_response: dict) -> dict:
         "content_filter": "end_turn",
         "function_call": "tool_use"
     }
-    
+
     anthropic_response = {
         "id": openai_response.get("id", ""),
         "type": "message",
@@ -1089,7 +1092,7 @@ def convert_openai_to_anthropic(openai_response: dict) -> dict:
             "output_tokens": openai_response.get("usage", {}).get("completion_tokens", 0)
         }
     }
-    
+
     # Convert content
     content = message.get("content", "")
     if content:
@@ -1097,7 +1100,7 @@ def convert_openai_to_anthropic(openai_response: dict) -> dict:
             "type": "text",
             "text": content
         })
-    
+
     # Convert tool calls from OpenAI format to Anthropic format
     tool_calls = message.get("tool_calls", [])
     if tool_calls:
@@ -1109,14 +1112,14 @@ def convert_openai_to_anthropic(openai_response: dict) -> dict:
                     arguments = json.loads(function.get("arguments", "{}"))
                 except json.JSONDecodeError:
                     arguments = {}
-                
+
                 anthropic_response["content"].append({
                     "type": "tool_use",
                     "id": tool_call.get("id"),
                     "name": function.get("name"),
                     "input": arguments
                 })
-    
+
     return anthropic_response
 
 
@@ -1130,11 +1133,11 @@ def convert_openai_stream_to_anthropic(chunk: bytes) -> bytes:
 def start_antigravity_server():
     """Start the Antigravity proxy server as a subprocess."""
     global antigravity_process
-    
+
     if not ANTIGRAVITY_ENABLED:
         logger.info("[Antigravity] Disabled - skipping startup")
         return
-    
+
     try:
         # Find npx executable (Windows: npx.cmd, Unix: npx)
         npx_cmd = None
@@ -1144,7 +1147,7 @@ def start_antigravity_server():
             r"C:\Program Files\nodejs\npx.cmd",  # Common Windows install
             os.path.expanduser(r"~\AppData\Roaming\npm\npx.cmd"),  # User install
         ]
-        
+
         for path in possible_paths:
             try:
                 result = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=5)
@@ -1154,30 +1157,30 @@ def start_antigravity_server():
                     break
             except (FileNotFoundError, subprocess.TimeoutExpired):
                 continue
-        
+
         if not npx_cmd:
             logger.error("[Antigravity] npx not found. Please ensure Node.js is installed and in PATH.")
             logger.info("[Antigravity] Try: refreshenv or restart terminal after installing Node.js")
             return
-        
+
         # Check if Node.js is available
         node_check = subprocess.run(["node", "--version"], capture_output=True, text=True)
         if node_check.returncode != 0:
             logger.error("[Antigravity] Node.js not found. Please install Node.js to use Antigravity.")
             return
-        
+
         logger.info(f"[Antigravity] Node.js version: {node_check.stdout.strip()}")
-        
+
         # Skip package check - npx will install if needed
         # The --help check can hang on slow networks or with npm cache issues
         logger.info("[Antigravity] Skipping package version check...")
-        
+
         # Start Antigravity server
         logger.info(f"[Antigravity] Starting server on port {ANTIGRAVITY_PORT}...")
-        
+
         env = os.environ.copy()
         env["PORT"] = str(ANTIGRAVITY_PORT)
-        
+
         # Start Antigravity in detached process
         import time
         if os.name == 'nt':
@@ -1198,20 +1201,20 @@ def start_antigravity_server():
                 stderr=subprocess.DEVNULL,
                 start_new_session=True
             )
-        
+
         # Wait for the server to start and verify it's responding
         max_wait = 15  # Wait up to 15 seconds
         wait_interval = 1
         healthy = False
-        
+
         for attempt in range(max_wait):
             time.sleep(wait_interval)
-            
+
             # Check if process crashed
             if antigravity_process.poll() is not None:
                 logger.error(f"[Antigravity] Process crashed during startup")
                 return
-            
+
             # Check if server is responding
             try:
                 import httpx
@@ -1221,13 +1224,13 @@ def start_antigravity_server():
                     break
             except Exception:
                 continue  # Keep waiting
-        
+
         if healthy:
             logger.info(f"[Antigravity] Server started successfully on port {ANTIGRAVITY_PORT}")
         else:
             logger.warning(f"[Antigravity] Server process running but not responding on port {ANTIGRAVITY_PORT}")
             logger.warning("[Antigravity] Check that port is not blocked and npm cache is working")
-    
+
     except FileNotFoundError:
         logger.error("[Antigravity] npx not found. Please install Node.js and npm.")
     except subprocess.TimeoutExpired:
@@ -1239,7 +1242,7 @@ def start_antigravity_server():
 def stop_antigravity_server():
     """Stop the Antigravity proxy server."""
     global antigravity_process
-    
+
     if antigravity_process:
         logger.info("[Antigravity] Stopping server...")
         antigravity_process.terminate()
@@ -1258,9 +1261,9 @@ async def proxy_request(request: Request, endpoint: str) -> JSONResponse | Strea
         body = await request.body()
         body_json = json.loads(body) if body else {}
         original_model = body_json.get("model", "claude-sonnet-4-5-20250929")
-        
+
         logger.info(f"[Proxy] Incoming request for model: {original_model}")
-        
+
         api_key, base_url, tier, translated_model, provider_type = get_provider_config(original_model)
 
         # Strip [1m] suffix from model name - it's internal notation, not part of actual API model names
@@ -1270,10 +1273,10 @@ async def proxy_request(request: Request, endpoint: str) -> JSONResponse | Strea
 
         # Update the model in the request body with translated name
         body_json["model"] = translated_model
-        
+
         original_headers = dict(request.headers)
         use_real_anthropic = False  # Track if using Real Anthropic OAuth
-        
+
         # Route to Antigravity
         if provider_type == "antigravity":
             logger.info(f"[Proxy] {original_model} → Antigravity ({translated_model})")
@@ -1302,14 +1305,14 @@ async def proxy_request(request: Request, endpoint: str) -> JSONResponse | Strea
                 "Content-Type": "application/json",
                 "x-api-key": api_key
             }
-            
+
             for header in ["anthropic-version", "anthropic-beta"]:
                 if header in original_headers:
                     target_headers[header] = original_headers[header]
-            
+
             request_body = json.dumps(body_json).encode('utf-8')
             logger.info(f"[Proxy] {original_model} → {tier} Provider (API Key) using model: {translated_model}")
-            
+
         else:
             # Real Anthropic with OAuth
             use_real_anthropic = True
@@ -1412,7 +1415,7 @@ async def proxy_request(request: Request, endpoint: str) -> JSONResponse | Strea
                     status_code=response.status_code,
                     headers={k: v for k, v in response.headers.items() if k.lower() not in ['content-encoding', 'content-length', 'transfer-encoding']},
                 )
-    
+
     except Exception as e:
         logger.error(f"[Proxy] Error: {type(e).__name__}: {e}")
         import traceback
@@ -1429,12 +1432,12 @@ async def count_tokens_endpoint(request: Request):
         body = await request.body()
         body_json = json.loads(body) if body else {}
         original_model = body_json.get("model", "claude-sonnet-4-5-20250929")
-        
+
         api_key, base_url, tier, translated_model, provider_type = get_provider_config(original_model)
-        
+
         # Update the model in the request body
         body_json["model"] = translated_model
-        
+
         if not api_key and not base_url:
             return await proxy_request(request, "messages/count_tokens")
         else:
@@ -1452,7 +1455,7 @@ async def health_check(request: Request):
                 antigravity_status = "healthy" if response.status_code == 200 else "unhealthy"
         except Exception:
             antigravity_status = "not_running"
-    
+
     return JSONResponse(content={
         "status": "healthy",
         "providers": {
@@ -1512,7 +1515,7 @@ async def get_config_endpoint(request: Request):
     """Get current routing configuration."""
     with config_lock:
         config_copy = runtime_config.copy()
-    
+
     # Add provider availability info (read from env for custom provider to get latest)
     custom_api_key = os.getenv("CUSTOM_PROVIDER_API_KEY")
     custom_base_url = os.getenv("CUSTOM_PROVIDER_BASE_URL")
@@ -1537,12 +1540,14 @@ async def get_config_endpoint(request: Request):
             "claude-sonnet-4-5",
             "claude-opus-4-5"
         ],
-        "zai": ["zai-4.7", "glm-4.7"],
+        "zai": ["glm-4.7"],
         "anthropic": [
             "claude-sonnet-4-5-20250929",
             "claude-haiku-4-5-20251001",
             "claude-3-5-haiku-20241022",
-            "claude-opus-4-20250514"
+            "claude-opus-4-20250514",
+            "claude-opus-4.6",
+            "claude-3-7-sonnet-20250219"
         ],
         "copilot": [
             "gpt-4.1",
@@ -1574,7 +1579,7 @@ async def get_config_endpoint(request: Request):
         ],
         "custom": build_custom_provider_models()
     }
-    
+
     return JSONResponse(content={
         "config": config_copy,
         "providers_available": providers_available,
@@ -1587,7 +1592,7 @@ async def update_config_endpoint(request: Request):
     try:
         body = await request.body()
         updates = json.loads(body) if body else {}
-        
+
         # Validate provider values
         valid_providers = ["antigravity", "zai", "glm", "anthropic", "copilot", "openrouter", "custom"]
         for tier in ["sonnet_provider", "haiku_provider", "opus_provider"]:
@@ -1597,25 +1602,25 @@ async def update_config_endpoint(request: Request):
                         content={"error": f"Invalid provider for {tier}. Must be one of: {valid_providers}"},
                         status_code=400
                     )
-        
+
         # Update runtime configuration
         with config_lock:
             for key, value in updates.items():
                 if key in ["sonnet_provider", "haiku_provider", "opus_provider", "sonnet_model", "haiku_model", "opus_model"]:
                     runtime_config[key] = value
             runtime_config["last_updated"] = datetime.now().isoformat()
-        
+
         # Save to file
         save_config()
-        
+
         logger.info(f"[Config] Updated routing configuration: {updates}")
-        
+
         return JSONResponse(content={
             "status": "success",
             "message": "Configuration updated successfully",
             "config": runtime_config.copy()
         })
-    
+
     except Exception as e:
         logger.error(f"[Config] Failed to update configuration: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
@@ -1787,13 +1792,13 @@ async def test_antigravity_endpoint(request: Request):
             "messages": [{"role": "user", "content": "Say hello"}],
             "max_tokens": 100
         }
-        
+
         headers = {
             "Content-Type": "application/json",
             "x-api-key": "test",
             "anthropic-version": "2023-06-01"
         }
-        
+
         logger.info("[Test] Sending minimal test to Antigravity")
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
@@ -1801,7 +1806,7 @@ async def test_antigravity_endpoint(request: Request):
                 headers=headers,
                 json=test_body
             )
-            
+
             logger.info(f"[Test] Response status: {response.status_code}")
             return JSONResponse(content={
                 "status": response.status_code,
@@ -1881,7 +1886,7 @@ if __name__ == "__main__":
     logger.info("=" * 70)
     logger.info("Claude Code Proxy - Unified Router (Z.AI + Gemini + Anthropic + Copilot)")
     logger.info("=" * 70)
-    
+
     # Show routing configuration
     def get_model_display(provider, tier):
         if provider == "antigravity":
@@ -1907,12 +1912,12 @@ if __name__ == "__main__":
             return f"GitHub Copilot ({model_map.get(tier, 'unknown')})"
         else:
             return "Anthropic (OAuth)"
-    
+
     logger.info("Current Routing Configuration:")
     logger.info(f"  Sonnet → {get_model_display(get_sonnet_provider(), 'Sonnet')}")
     logger.info(f"  Haiku  → {get_model_display(get_haiku_provider(), 'Haiku')}")
     logger.info(f"  Opus   → {get_model_display(get_opus_provider(), 'Opus')}")
-    
+
     if ANTIGRAVITY_ENABLED:
         logger.info("=" * 70)
         logger.info("Antigravity Server:")
@@ -1921,7 +1926,7 @@ if __name__ == "__main__":
         logger.info(f"  Dashboard: http://localhost:{ANTIGRAVITY_PORT}")
     else:
         logger.info(f"Antigravity: Disabled")
-    
+
     oauth_token = get_oauth_token()
     current_providers = [get_sonnet_provider(), get_haiku_provider(), get_opus_provider()]
     if "anthropic" in current_providers:
@@ -1933,26 +1938,26 @@ if __name__ == "__main__":
         logger.info("Authentication: DISABLED (Warning: Server is open to everyone)")
 
     logger.info("=" * 70)
-    logger.info("Proxy listening on http://0.0.0.0:8082")
-    logger.info("Configuration Dashboard: http://localhost:8082/dashboard")
-    logger.info("Health check: http://localhost:8082/health")
-    logger.info("API endpoint: http://localhost:8082/v1/messages")
+    logger.info(f"Proxy listening on http://0.0.0.0:{PROXY_PORT}")
+    logger.info(f"Configuration Dashboard: http://localhost:{PROXY_PORT}/dashboard")
+    logger.info(f"Health check: http://localhost:{PROXY_PORT}/health")
+    logger.info(f"API endpoint: http://localhost:{PROXY_PORT}/v1/messages")
     logger.info("=" * 70)
-    
+
     # Start Antigravity if enabled
     if ANTIGRAVITY_ENABLED:
         start_antigravity_server()
-    
+
     # Register cleanup handlers
     def cleanup():
         stop_antigravity_server()
-    
+
     atexit.register(cleanup)
     signal.signal(signal.SIGTERM, lambda s, f: cleanup())
     signal.signal(signal.SIGINT, lambda s, f: cleanup())
 
     try:
-        uvicorn.run(app, host="0.0.0.0", port=8082, log_level="info")
+        uvicorn.run(app, host="0.0.0.0", port=PROXY_PORT, log_level="info")
     finally:
         cleanup()
 

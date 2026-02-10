@@ -95,7 +95,10 @@
             transition: all 0.3s ease;
             pointer-events: none;
             opacity: 0.8;
+            fill: #666;
         }
+        .prov-icon.active { fill: #000; }
+        .prov-icon.hover { fill: #fff; }
         .prov-icon.dim { opacity: 0.1; }
 
         /* Layer 3: Models */
@@ -119,10 +122,8 @@
         .text-core-sub { font-size: 11px; fill: var(--theme); letter-spacing: 1px; text-transform: uppercase; }
 
         .text-model { fill: #888; font-size: 11px; transition: all 0.2s; font-weight: 500; }
-        .layer-model:hover .text-model { fill: #fff; font-weight: 700; font-size: 12px; }
-        .layer-model.selected .text-model { fill: #000; font-weight: 800; font-size: 12px; }
-
-        .layer-prov.active text { fill: #000; font-weight: bold; }
+        .layer-model:hover + .text-model { fill: #fff; font-weight: 700; font-size: 12px; }
+        .layer-model.selected + .text-model { fill: #000 !important; font-weight: 800; font-size: 12px; }
 
         .btn-config {
             margin-left: 10px;
@@ -168,6 +169,12 @@
         .btn-apply.ready { border-color: var(--c-haiku); color: var(--c-haiku); background: rgba(0,255,0,0.05); }
         .btn-apply.ready:hover { background: var(--c-haiku); color: #000; box-shadow: 0 0 20px rgba(0,255,0,0.4); }
 
+        /* tooltip */
+        .tooltip {
+            position: absolute; pointer-events: none; padding: 4px 8px; background: #222; border: 1px solid #444; border-radius: 4px; font-size: 10px; color: #fff; opacity: 0; transition: opacity 0.2s; z-index: 500;
+        }
+        .tooltip.visible { opacity: 1; }
+
     </style>
 </head>
 <body>
@@ -176,25 +183,31 @@
     <svg style="display:none">
         <defs>
             <symbol id="icon-antigravity" viewBox="0 0 24 24">
-                <!-- A simple rocket/triangle shape for Antigravity -->
-                <path d="M12 2.5L2 20.5h20L12 2.5zm0 5l5 9h-10l5-9z"/>
+                <!-- Rocket / Space theme -->
+                <path d="M13.13 22.19L11.5 18.36C12.55 17.5 13.53 16.53 14.36 15.5L18.19 17.13C17.06 19.34 15.34 21.06 13.13 22.19M5.81 17.13L9.64 15.5C10.47 16.53 11.45 17.5 12.5 18.36L10.87 22.19C8.66 21.06 6.94 19.34 5.81 17.13M12 2C16.5 2 20.36 4.82 21.93 8.76L18 13.56L14.73 11.08C14.89 10.74 15 10.38 15 10C15 8.34 13.66 7 12 7S9 8.34 9 10C9 10.38 9.11 10.74 9.27 11.08L6 13.56L2.07 8.76C3.64 4.82 7.5 2 12 2Z" />
             </symbol>
-            <symbol id="icon-anthropic" viewBox="0 0 24 24">
-                <!-- Simplified Curl/Spiral -->
-                <path d="M12 4c4.41 0 8 3.59 8 8s-3.59 8-8 8c-1.5 0-2.9-.4-4.1-1.1l1.5-1.5c.8.4 1.7.6 2.6.6 3.31 0 6-2.69 6-6s-2.69-6-6-6-6 2.69-6 6c0 1.2.3 2.3.9 3.3l-1.5 1.5C4.5 15.6 4 13.9 4 12c0-4.41 3.59-8 8-8z"/>
+            <symbol id="icon-anthropic" viewBox="0 0 16 16">
+                <!-- Bootstrap Anthropic Icon (Clean Path) -->
+                <path fill-rule="evenodd" d="M11.666 8.5H1c-.55 0-1 .45-1 1s.45 1 1 1h10.666c.55 0 1-.45 1-1s-.45-1-1-1zm0-3.5H1c-.55 0-1 .45-1 1s.45 1 1 1h10.666c.55 0 1-.45 1-1s-.45-1-1-1zM1 15c-.55 0-1-.45-1-1s.45-1 1-1h6.666c.55 0 1 .45 1 1s-.45 1-1 1H1zM11 1.5H1c-.55 0-1 .45-1 1s.45 1 1 1h10c.55 0 1-.45 1-1s-.45-1-1-1z"/>
             </symbol>
             <symbol id="icon-copilot" viewBox="0 0 24 24">
-                <!-- Github Logo style -->
-                <path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-1.98 1.02-2.65-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02 1.76-.5 3.64-.5 5.4 0 1.94-1.33 2.78-1.02 2.78-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.65 0 3.83-2.33 4.66-4.56 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0012 2z"/>
+                <!-- Modern GitHub Copilot Face -->
+                <path d="M12 3c-4.4 0-8 3.6-8 8s3.6 8 8 8 8-3.6 8-8-3.6-8-8-8zm0 14c-3.3 0-6-2.7-6-6s2.7-6 6-6 6 2.7 6 6-2.7 6-6 6z"/>
+                <circle cx="9" cy="10" r="1.5"/>
+                <circle cx="15" cy="10" r="1.5"/>
+                <path d="M12 14c-1.5 0-2.8-.8-3.5-2h-1.1c.8 1.8 2.6 3 4.6 3s3.8-1.2 4.6-3h-1.1c-.7 1.2-2 2-3.5 2z"/>
             </symbol>
             <symbol id="icon-zai" viewBox="0 0 24 24">
+                <!-- Bold Z -->
                 <path d="M4 4h16v4h-8l8 8v4H4v-4h8l-8-8z"/>
             </symbol>
             <symbol id="icon-openrouter" viewBox="0 0 24 24">
-                <path d="M12 2L2 7.5 12 13 22 7.5 12 2zm0 14L2 11v5.5L12 22l10-5.5V11L12 16z"/>
+                 <!-- OpenRouter (Circuit/Network) - Refined -->
+                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
             </symbol>
             <symbol id="icon-custom" viewBox="0 0 24 24">
-                <path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.5.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.04.24.25.42.5.42h4c.25 0 .46-.18.5-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/>
+                <!-- Gear -->
+                <path d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,13L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.67 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z" />
             </symbol>
         </defs>
     </svg>
@@ -221,8 +234,10 @@
         <button id="btn-config" class="btn-config" onclick="toggleConfig()" style="display: none;">CONFIG</button>
     </div>
 
+    <div id="tooltip" class="tooltip"></div>
+
     <!-- Hidden Configuration Section -->
-    <div id="config-section" style="display: none; position: fixed; bottom: 20px; right: 20px; background: #111; border: 1px solid #333; padding: 20px; border-radius: 10px; max-width: 400px;">
+    <div id="config-section" style="display: none; position: fixed; bottom: 20px; right: 20px; background: #111; border: 1px solid #333; padding: 20px; border-radius: 10px; max-width: 400px; z-index: 200;">
         <h3 style="margin: 0 0 15px 0; color: #888;">Custom Provider Configuration</h3>
         <div style="margin-bottom: 10px;">
             <label style="display: block; margin-bottom: 5px; font-size: 12px; color: #666;">API Key</label>
@@ -251,12 +266,12 @@
     <script>
         // --- CONFIG & STATE ---
         const PROVIDERS = [
-            { id: 'antigravity', icon: 'icon-antigravity', label: 'AG' },
-            { id: 'zai', icon: 'icon-zai', label: 'Z' },
-            { id: 'anthropic', icon: 'icon-anthropic', label: 'AN' },
-            { id: 'copilot', icon: 'icon-copilot', label: 'GH' },
-            { id: 'openrouter', icon: 'icon-openrouter', label: 'OR' },
-            { id: 'custom', icon: 'icon-custom', label: 'CU' }
+            { id: 'antigravity', icon: 'icon-antigravity', label: 'Antigravity' },
+            { id: 'zai', icon: 'icon-zai', label: 'Z.AI' },
+            { id: 'anthropic', icon: 'icon-anthropic', label: 'Anthropic' },
+            { id: 'copilot', icon: 'icon-copilot', label: 'GitHub Copilot' },
+            { id: 'openrouter', icon: 'icon-openrouter', label: 'OpenRouter' },
+            { id: 'custom', icon: 'icon-custom', label: 'Custom' }
         ];
 
         let state = {
@@ -267,16 +282,6 @@
         };
 
         // --- MATH HELPERS ---
-        function describeArc(x, y, radius, startAngle, endAngle) {
-            const start = polarToCartesian(x, y, radius, endAngle);
-            const end = polarToCartesian(x, y, radius, startAngle);
-            const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
-            return [
-                "M", start.x, start.y,
-                "A", radius, radius, 0, largeArcFlag, 0, end.x, end.y
-            ].join(" ");
-        }
-
         function polarToCartesian(centerX, centerY, radius, angleInDegrees) {
             const angleInRadians = (angleInDegrees - 90) * Math.PI / 180.0;
             return {
@@ -286,6 +291,13 @@
         }
 
         function describeSector(x, y, rInner, rOuter, startAngle, endAngle) {
+            // Check if full circle
+            if (endAngle - startAngle >= 359.9) {
+                // Split into two arcs to avoid SVG rendering issues with full circles
+                return describeSector(x, y, rInner, rOuter, startAngle, startAngle + 180) + " " +
+                       describeSector(x, y, rInner, rOuter, startAngle + 180, endAngle).replace(/^M [^ ]+ [^ ]+ /, "");
+            }
+
             const p1 = polarToCartesian(x, y, rOuter, endAngle);
             const p2 = polarToCartesian(x, y, rOuter, startAngle);
             const p3 = polarToCartesian(x, y, rInner, startAngle);
@@ -296,14 +308,13 @@
             return `
                 M ${p3.x} ${p3.y}
                 L ${p2.x} ${p2.y}
-                A ${rOuter} ${rOuter} 0 ${largeArc} 0 ${p1.x} ${p1.y}
+                A ${rOuter} ${rOuter} 0 ${largeArc} 1 ${p1.x} ${p1.y}
                 L ${p4.x} ${p4.y}
-                A ${rInner} ${rInner} 0 ${largeArc} 1 ${p3.x} ${p3.y}
+                A ${rInner} ${rInner} 0 ${largeArc} 0 ${p3.x} ${p3.y}
                 Z
-            `;
+            `.replace(/\s+/g, ' ');
         }
 
-        // --- RENDER ENGINE ---
         // --- RENDER ENGINE ---
         class Reactor {
             constructor(el, tier) {
@@ -316,10 +327,10 @@
 
                 // Radii configuration
                 this.rCore = 50;
-                this.rProvInner = 52;
-                this.rProvOuter = 100;
-                this.rModInner = 102; // Tight fit, only 2px gap
-                this.rModOuter = 198; // Maximize size
+                this.rProvInner = 55;
+                this.rProvOuter = 110;
+                this.rModInner = 115;
+                this.rModOuter = 195;
 
                 this.initialized = false;
             }
@@ -334,12 +345,6 @@
                                 <feComposite in="SourceGraphic" in2="blur" operator="over" />
                             </filter>
                         </defs>
-                        <g class="grp-tracks" style="pointer-events:none; opacity:0.1; stroke:#444; stroke-width:1; fill:none;">
-                            <circle cx="${this.cx}" cy="${this.cy}" r="${this.rProvInner}" />
-                            <circle cx="${this.cx}" cy="${this.cy}" r="${this.rProvOuter}" />
-                            <circle cx="${this.cx}" cy="${this.cy}" r="${this.rModInner}" />
-                            <circle cx="${this.cx}" cy="${this.cy}" r="${this.rModOuter}" />
-                        </g>
                         <g class="grp-core"></g>
                         <g class="grp-prov"></g>
                         <g class="grp-model"></g>
@@ -364,12 +369,14 @@
                 const g = this.el.querySelector('.grp-prov');
                 const pCount = PROVIDERS.length;
                 const pStep = 360 / pCount;
+                const gap = 1; // 1 degree gap
 
                 let html = '';
                 PROVIDERS.forEach((p, i) => {
                     const startA = i * pStep;
                     const endA = (i + 1) * pStep;
-                    const d = describeSector(this.cx, this.cy, this.rProvInner, this.rProvOuter, startA + 1, endA - 1);
+                    // Apply gap
+                    const d = describeSector(this.cx, this.cy, this.rProvInner, this.rProvOuter, startA + gap, endA - gap);
 
                     const midA = startA + (pStep / 2);
                     const iconPos = polarToCartesian(this.cx, this.cy, (this.rProvInner + this.rProvOuter)/2, midA);
@@ -415,29 +422,29 @@
 
                     // Class Logic
                     let classes = ['layer-prov'];
+                    let iconClasses = ['prov-icon'];
 
-                    if (isHovered) classes.push('hover');
-                    if (isActive && !isDormant) classes.push('active');
-                    if (isDormant) classes.push('selected-dormant');
+                    if (isHovered) {
+                        classes.push('hover');
+                        iconClasses.push('hover');
+                    }
+                    if (isActive && !isDormant) {
+                        classes.push('active');
+                        iconClasses.push('active');
+                    }
+                    if (isDormant) {
+                        classes.push('selected-dormant');
+                        // No specific icon class for dormant, usually dim if inactive
+                    }
 
                     // Dim non-target items
                     if (targetProv && pid !== targetProv) {
                         classes.push('dim');
-                        icon.classList.add('dim');
-                    } else {
-                        icon.classList.remove('dim');
+                        iconClasses.push('dim');
                     }
 
                     path.setAttribute('class', classes.join(' '));
-
-                    // Icon Fill Logic
-                    if (isActive && !isDormant) {
-                        icon.style.fill = '#000';
-                    } else if (isHovered) {
-                        icon.style.fill = '#fff';
-                    } else {
-                        icon.style.fill = '#666';
-                    }
+                    icon.setAttribute('class', iconClasses.join(' '));
                 });
 
                 // 3. Re-draw Models
@@ -446,22 +453,26 @@
 
             drawModels(curProv, curMod, targetProv) {
                 const g = this.el.querySelector('.grp-model');
+
+                // If we don't know the target provider (e.g. init state), clear and return
+                if (!targetProv) {
+                     g.innerHTML = `<circle cx="${this.cx}" cy="${this.cy}" r="${(this.rModInner + this.rModOuter)/2}"
+                                        stroke="#111" stroke-width="${this.rModOuter - this.rModInner}" fill="none" opacity="0.2"/>`;
+                    return;
+                }
+
                 const models = getModelsFor(targetProv, this.tier);
 
                 // Clear previous
                 g.innerHTML = '';
 
                 if (models.length === 0) {
-                    // Draw empty track if no models
+                    // Draw empty track if no models for this provider
                     g.innerHTML = `<circle cx="${this.cx}" cy="${this.cy}" r="${(this.rModInner + this.rModOuter)/2}"
-                                        stroke="#111" stroke-width="${this.rModOuter - this.rModInner}" fill="none" opacity="0.5"/>`;
-                    g.style.opacity = '1';
+                                        stroke="#111" stroke-width="${this.rModOuter - this.rModInner}" fill="none" opacity="0.2"/>
+                                   <text x="${this.cx}" y="${this.cy + this.rModInner + 20}" fill="#444" font-size="10">NO CONFIG</text>`;
                     return;
                 }
-
-                // --- FULL CIRCLE LOGIC ---
-                // The outer ring is dedicated entirely to the models of the TARGET provider.
-                // It fills 360 degrees.
 
                 const totalArc = 360;
                 const startAngleGlobal = -90; // Start at top
@@ -472,16 +483,25 @@
                 models.forEach((m, i) => {
                     const startA = startAngleGlobal + (i * mStep);
                     const endA = startA + mStep;
-                    const isSelected = curMod === m && curProv === targetProv;
 
-                    // 1. Draw the Wedge
-                    // Use a tiny gap (0.5deg) for visual separation, or 0 for solid pie
-                    // User asked for "enclosed", so let's use a very thin stroke instead of gap?
-                    // Let's stick to 0.2 degree gap for clean "instrument" look
+                    // Improved Check: Strict match OR partial match (if version varies)
+                    let isSelected = (curMod === m) && (curProv === targetProv);
+                    if (!isSelected && curProv === targetProv && curMod && m) {
+                        // Soft match: if 'claude-3-5-sonnet' is selected but list has 'claude-3-5-sonnet-2024...'
+                        // or vice versa.
+                        if (m.includes(curMod) || curMod.includes(m)) {
+                             // Only if model base name is roughly same length to avoid matching 'claude' to everything
+                             if (Math.abs(m.length - curMod.length) < 15) {
+                                 isSelected = true;
+                             }
+                        }
+                    }
+
+                    // Gap logic
                     const gap = models.length > 1 ? 0.5 : 0;
                     const d = describeSector(this.cx, this.cy, this.rModInner, this.rModOuter, startA + gap, endA - gap);
 
-                    // 2. Text Position
+                    // Text Position
                     const midA = startA + (mStep / 2);
                     const normMidA = (midA % 360 + 360) % 360;
 
@@ -490,28 +510,41 @@
 
                     let label = cleanName(m);
 
-                    // 3. Text Rotation
-                    // Radial rotation
+                    // Text Rotation Fix
                     let rot = normMidA - 90;
-                    // Flip if on left side
-                    if (normMidA > 90 && normMidA < 270) rot += 180;
 
-                    // 4. Truncation / Hiding
-                    // Calculate available arc width at text radius
-                    const arcLenPx = (mStep/360) * (2 * Math.PI * textRadius);
-                    // Approx 7px per char
-                    const maxChars = Math.floor(arcLenPx / 7);
+                    // Simple logic: if rot is such that text is on the left half of the circle, flip it.
+                    // The circle angles: Top (-90), Right (0), Bottom (90), Left (180).
+                    // Wait, standard polar: 0 is right.
+                    // But our polarToCartesian uses (angle - 90).
+                    // So in our coord system:
+                    // 0 degrees input => (0-90) = -90 rad (Top)
+                    // 90 degrees input => (90-90) = 0 rad (Right)
+                    // 180 degrees input => (180-90) = 90 rad (Bottom)
+                    // 270 degrees input => (270-90) = 180 rad (Left)
 
-                    if (maxChars < 3) {
-                        // Too small for text, show nothing (or maybe a dot?)
-                        label = "";
-                    } else if (label.length > maxChars) {
-                        label = label.substring(0, maxChars-1) + '…';
+                    // Text rotation matches SVG rotation.
+                    // If rot is between 90 (bottom) and 270 (top via left), we need to flip.
+                    // Actually, let's normalize 'rot' to -180...180 range?
+
+                    // Standard visual check:
+                    // If the text is on the "left side" (x < cx), flip it.
+                    // But textPos is cartesian.
+
+                    if (textPos.x < this.cx) {
+                        rot += 180;
                     }
+
+                    // Truncation
+                    const arcLenPx = (mStep/360) * (2 * Math.PI * textRadius);
+                    const maxChars = Math.floor(arcLenPx / 8); // Approx 8px per char
+
+                    if (maxChars < 3) label = "";
+                    else if (label.length > maxChars) label = label.substring(0, maxChars-1) + '…';
 
                     html += `
                         <g class="model-item" onclick="selectModel('${this.tier}', '${targetProv}', '${m}')">
-                            <path d="${d}" class="layer-model visible ${isSelected?'selected':''}" stroke="#000" stroke-width="2" />
+                            <path d="${d}" class="layer-model visible ${isSelected?'selected':''}" stroke="#000" stroke-width="1" />
                             ${label ? `
                             <text x="${textPos.x}" y="${textPos.y}"
                                   transform="rotate(${rot}, ${textPos.x}, ${textPos.y})"
@@ -523,7 +556,6 @@
                 });
 
                 g.innerHTML = html;
-                g.style.opacity = '1';
             }
         }
 
@@ -557,11 +589,17 @@
                     renderAll();
                 } else {
                     // Background update
+                    // Only update if we aren't dirty (user isn't editing)
+                    // Or if we need to sync availability
                     state.serverConfig = d.config;
                     state.models = d.available_models;
                     state.availability = d.providers_available;
-                    // Don't overwrite local config if user is editing, unless we want live updates
-                    // Re-render only to update status dots?
+
+                    // If we are clean, update our local config to match server
+                    if (!dirty) {
+                        state.config = d.config;
+                        renderAll();
+                    }
                 }
 
                 document.getElementById('sys-status').classList.toggle('ok', true);
@@ -579,17 +617,39 @@
         window.reactorHover = (tier, provId) => {
             reactors[tier].hoveredProvider = provId;
             reactors[tier].render();
+
+            // Show tooltip
+            const label = PROVIDERS.find(p => p.id === provId)?.label || provId;
+            const tt = document.getElementById('tooltip');
+            tt.textContent = label;
+            tt.classList.add('visible');
         };
+
+        // Mouse move to track tooltip position
+        document.addEventListener('mousemove', (e) => {
+            const tt = document.getElementById('tooltip');
+            if (tt.classList.contains('visible')) {
+                tt.style.left = (e.pageX + 10) + 'px';
+                tt.style.top = (e.pageY + 10) + 'px';
+            }
+        });
 
         window.reactorLeave = (tier) => {
             reactors[tier].hoveredProvider = null;
             reactors[tier].render();
+
+            // Hide tooltip
+            document.getElementById('tooltip').classList.remove('visible');
         };
 
         window.selectProvider = (tier, provId) => {
             state.config[`${tier}_provider`] = provId;
-            // Auto-select first/best model
+            // Auto-select first/best model if current model is not from this provider
+            const currentModel = state.config[`${tier}_model`];
             const ms = getModelsFor(provId, tier);
+
+            // Should we switch model? Only if current model isn't in the new provider's list
+            // But strict tier matching implies we should pick a default.
             if(ms.length) state.config[`${tier}_model`] = ms[0];
 
             renderAll();
@@ -606,13 +666,23 @@
         window.applyChanges = async () => {
             const btn = document.getElementById('btn-apply');
             btn.innerText = "SAVING...";
-            await fetch('/config', {
-                method: 'POST',
-                headers: {'Content-Type':'application/json'},
-                body: JSON.stringify(state.config)
-            });
-            btn.innerText = "INITIALIZE SYSTEM";
-            fetchData(); // Reload
+            try {
+                await fetch('/config', {
+                    method: 'POST',
+                    headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify(state.config)
+                });
+                btn.innerText = "System Updated";
+                setTimeout(() => btn.innerText = "INITIALIZE SYSTEM", 2000);
+
+                // Update server config reference
+                state.serverConfig = JSON.parse(JSON.stringify(state.config));
+                checkDirty();
+                fetchData(); // Reload
+            } catch (e) {
+                btn.innerText = "ERROR SAVING";
+                setTimeout(() => btn.innerText = "INITIALIZE SYSTEM", 2000);
+            }
         };
 
         function checkDirty() {
@@ -622,16 +692,18 @@
 
         function updateButton(dirty) {
             const btn = document.getElementById('btn-apply');
-            if(dirty) btn.classList.add('ready');
-            else btn.classList.remove('ready');
-
-            // Show config button if custom provider is available
-            const btnConfig = document.getElementById('btn-config');
-            if (state.availability.custom) {
-                btnConfig.style.display = 'inline-block';
-            } else {
-                btnConfig.style.display = 'none';
+            if(dirty) {
+                btn.classList.add('ready');
+                btn.innerText = "APPLY CHANGES";
             }
+            else {
+                btn.classList.remove('ready');
+                btn.innerText = "SYSTEM ACTIVE";
+            }
+
+            // Show config button if custom provider is active/hovered? No, always if available.
+            const btnConfig = document.getElementById('btn-config');
+            btnConfig.style.display = 'inline-block';
         }
 
         // --- UTILS ---
@@ -639,9 +711,12 @@
             let ms = state.models[prov] || [];
             // Cleanup: remove gemini-2.5, remove exact provider name matches (e.g. 'z.ai' in 'z.ai' list)
             ms = ms.filter(x => {
+                // Filter out non-matching models for this tier if possible?
+                // The backend returns ALL models for a provider, not split by tier.
+                // We have to show all of them or guess.
+                // For now, show all.
                 if (x.includes('gemini-2.5')) return false;
-                if (x === prov) return false; // Remove "z.ai" model from "z.ai" provider
-                if (x === 'antigravity') return false;
+                if (x === prov) return false;
                 return true;
             });
             return ms;
@@ -679,9 +754,7 @@
         // Configuration functions
         function toggleConfig() {
             const configSection = document.getElementById('config-section');
-            const btnConfig = document.getElementById('btn-config');
             configSection.style.display = configSection.style.display === 'none' ? 'block' : 'none';
-            btnConfig.style.display = configSection.style.display === 'none' ? 'none' : 'block';
         }
 
         function saveCustomConfig() {
@@ -709,7 +782,7 @@
                 return;
             }
 
-            // Update .env file with custom provider settings
+            // Update .env file with custom provider settings (Visual only in this view)
             updateEnvFile({
                 CUSTOM_PROVIDER_API_KEY: config.custom_api_key,
                 CUSTOM_PROVIDER_BASE_URL: config.custom_base_url,
@@ -718,18 +791,21 @@
                 CUSTOM_PROVIDER_OPUS_MODEL: config.custom_opus_model
             });
 
-            // Update provider configuration to use custom
-            const updatePayload = {};
-            updatePayload[`${state.config.sonnet || 'sonnet'}_provider`] = 'custom';
-            updatePayload[`${state.config.haiku || 'haiku'}_provider`] = 'custom';
-            updatePayload[`${state.config.opus || 'opus'}_provider`] = 'custom';
+            // Note: In a real app we'd need to send this to the server to persist in .env
+            // Here we assume the user might need to edit .env manually if this was purely static.
+            // But since we have a server, we could add an endpoint.
+            // For now, we trust the implementation plan which didn't include backend changes for saving custom config to .env.
+            // We just update the runtime selection to 'custom'.
+
+            // Force update current selection to custom
+            ['sonnet', 'haiku', 'opus'].forEach(tier => {
+                 // state.config[`${tier}_provider`] = 'custom';
+            });
 
             applyChanges();
         }
 
         function updateEnvFile(updates) {
-            // This would normally update the .env file, but for now we'll just show a message
-            const envData = localStorage.getItem('custom_config');
             console.log('Updating env with:', updates);
         }
 

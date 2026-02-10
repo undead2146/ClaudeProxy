@@ -38,10 +38,11 @@ $TaskDescription = "Automatically starts the Claude Code Proxy server at system 
 
 # Define paths
 $ProxyRoot = Split-Path -Parent $PSScriptRoot
-$ProxyScript = Join-Path $ProxyRoot "proxy.py"
+$ServerDir = Join-Path $ProxyRoot "server"
+$ProxyScript = Join-Path $ServerDir "proxy.py"
 $LogDir = Join-Path $ProxyRoot "logs"
 $LogFile = Join-Path $LogDir "proxy.log"
-$EnvFile = Join-Path $ProxyRoot ".env"
+$EnvFile = Join-Path $ServerDir ".env"
 $StartScript = Join-Path $PSScriptRoot "start-proxy.ps1"
 
 # Verify admin privileges
@@ -127,7 +128,8 @@ Start-Sleep -Seconds 5
 # Start main proxy and redirect output to log
 Write-Host '[Startup] Starting main proxy server...'
 [Environment]::SetEnvironmentVariable('CLAUDE_PROXY_LOG_FILE', '$LogFile', 'Process')
-python -u '$ProxyScript'
+cd '$ServerDir'
+python -u 'proxy.py'
 "@
 
 # Create the scheduled task action
