@@ -858,12 +858,20 @@ async def proxy_to_openrouter(body_json: dict, original_headers: dict, endpoint:
 
 
 def fit_messages_to_limit(body_json: dict, max_kb: int = 100) -> bytes:
-    """Serialize request body, dropping oldest messages if payload exceeds provider limit.
+    """Adapt request payload so it fits within provider size limits.
 
-    Some providers (e.g. enowX) reject payloads over a certain size.
-    This trims conversation history from the front to fit, preserving
-    the most recent context and ensuring the first message has role 'user'.
+    Uses a multi-phase approach that preserves maximum conversation context:
+      Phase 1: Strip parameters that custom providers may not support.
+      Phase 2: Truncate large content blocks in older messages (tool results,
+               file contents, command outputs) while keeping the conversation
+               structure intact so the model remembers what tools were called.
+      Phase 3: More aggressive truncation on remaining large blocks.
+      Phase 4: Drop oldest messages only as an absolute last resort.
     """
+    # Strip params that custom providers are known to not support
+    for param in ('metadata',):
+        body_json.pop(param, None)
+
     request_body = json.dumps(body_json).encode('utf-8')
     if len(request_body) <= max_kb * 1024 or 'messages' not in body_json:
         return request_body
@@ -872,10 +880,68 @@ def fit_messages_to_limit(body_json: dict, max_kb: int = 100) -> bytes:
     original_size = len(request_body)
     original_count = len(messages)
 
-    # Keep dropping oldest messages until under limit (minimum 2 messages to preserve structure)
+    # Phase 2: Truncate large content blocks in older messages.
+    # Keep the last 10 messages untouched — they're the active context.
+    PRESERVE_RECENT = 10
+    BLOCK_MAX_CHARS = 200  # Keep a preview of each block
+
+    for msg in messages[:-PRESERVE_RECENT] if len(messages) > PRESERVE_RECENT else []:
+        if not isinstance(msg.get('content'), list):
+            continue
+        for block in msg['content']:
+            btype = block.get('type', '')
+            # Truncate tool_result text blocks (file contents, command output)
+            if btype == 'tool_result' and isinstance(block.get('content'), list):
+                for sub in block['content']:
+                    if sub.get('type') == 'text' and len(sub.get('text', '')) > BLOCK_MAX_CHARS:
+                        original_text = sub['text']
+                        sub['text'] = original_text[:BLOCK_MAX_CHARS] + f'\n...[truncated {len(original_text)} chars]'
+            elif btype == 'tool_result' and isinstance(block.get('content'), str):
+                if len(block['content']) > BLOCK_MAX_CHARS:
+                    block['content'] = block['content'][:BLOCK_MAX_CHARS] + f'\n...[truncated {len(block["content"])} chars]'
+            elif btype == 'text' and len(block.get('text', '')) > BLOCK_MAX_CHARS * 5:
+                original_text = block['text']
+                block['text'] = original_text[:BLOCK_MAX_CHARS * 5] + f'\n...[truncated {len(original_text)} chars]'
+
+    request_body = json.dumps(body_json).encode('utf-8')
+    if len(request_body) <= max_kb * 1024:
+        logger.info(
+            f"[Custom] Trimmed content blocks: "
+            f"{original_size/1024:.0f}KB → {len(request_body)/1024:.0f}KB "
+            f"(all {original_count} messages preserved)"
+        )
+        return request_body
+
+    # Phase 3: Truncate even more aggressively — ALL messages including recent ones
+    for msg in messages:
+        if not isinstance(msg.get('content'), list):
+            continue
+        for block in msg['content']:
+            btype = block.get('type', '')
+            if btype == 'tool_result' and isinstance(block.get('content'), list):
+                for sub in block['content']:
+                    if sub.get('type') == 'text' and len(sub.get('text', '')) > BLOCK_MAX_CHARS:
+                        original_text = sub['text']
+                        sub['text'] = original_text[:BLOCK_MAX_CHARS] + f'\n...[truncated {len(original_text)} chars]'
+            elif btype == 'tool_result' and isinstance(block.get('content'), str):
+                if len(block['content']) > BLOCK_MAX_CHARS:
+                    block['content'] = block['content'][:BLOCK_MAX_CHARS] + f'\n...[truncated {len(block["content"])} chars]'
+            elif btype == 'text' and len(block.get('text', '')) > BLOCK_MAX_CHARS * 2:
+                original_text = block['text']
+                block['text'] = original_text[:BLOCK_MAX_CHARS * 2] + f'\n...[truncated {len(original_text)} chars]'
+
+    request_body = json.dumps(body_json).encode('utf-8')
+    if len(request_body) <= max_kb * 1024:
+        logger.info(
+            f"[Custom] Aggressively trimmed content: "
+            f"{original_size/1024:.0f}KB → {len(request_body)/1024:.0f}KB "
+            f"(all {original_count} messages preserved)"
+        )
+        return request_body
+
+    # Phase 4: Last resort — drop oldest messages, but keep as many as possible
     while len(messages) > 2 and len(request_body) > max_kb * 1024:
         messages.pop(0)
-        # Ensure first message is always 'user' role
         while messages and messages[0].get('role') != 'user':
             messages.pop(0)
         request_body = json.dumps(body_json).encode('utf-8')
@@ -886,6 +952,7 @@ def fit_messages_to_limit(body_json: dict, max_kb: int = 100) -> bytes:
         f"({original_count} → {len(messages)} messages)"
     )
     return request_body
+
 
 
 def fix_streaming_tool_inputs(raw_body: bytes) -> bytes:
