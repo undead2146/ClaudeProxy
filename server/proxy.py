@@ -857,22 +857,71 @@ async def proxy_to_openrouter(body_json: dict, original_headers: dict, endpoint:
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
-def fit_messages_to_limit(body_json: dict, max_kb: int = 100) -> bytes:
-    """Adapt request payload so it fits within provider size limits.
+def _strip_cache_control(body_json: dict) -> None:
+    """Remove cache_control directives that custom providers don't support.
 
-    Uses a multi-phase approach that preserves maximum conversation context:
-      Phase 1: Strip parameters that custom providers may not support.
-      Phase 2: Truncate large content blocks in older messages (tool results,
-               file contents, command outputs) while keeping the conversation
-               structure intact so the model remembers what tools were called.
-      Phase 3: More aggressive truncation on remaining large blocks.
-      Phase 4: Drop oldest messages only as an absolute last resort.
+    Claude Code adds cache_control for Anthropic's prompt caching feature.
+    Custom providers (e.g. enowX) don't support this and may reject requests
+    containing these directives with 'Malformed request' errors.
     """
-    # Strip params that custom providers are known to not support
+    # Strip from system prompt blocks
+    if isinstance(body_json.get('system'), list):
+        for block in body_json['system']:
+            block.pop('cache_control', None)
+
+    # Strip from message content blocks
+    if 'messages' in body_json:
+        for msg in body_json['messages']:
+            if isinstance(msg.get('content'), list):
+                for block in msg['content']:
+                    block.pop('cache_control', None)
+                    # Also strip from nested tool_result content
+                    if isinstance(block.get('content'), list):
+                        for sub in block['content']:
+                            if isinstance(sub, dict):
+                                sub.pop('cache_control', None)
+
+
+def _truncate_content_blocks(messages: list, max_chars: int = 200, skip_last: int = 10) -> None:
+    """Truncate large content blocks in messages, preserving recent ones.
+
+    Replaces large tool_result outputs and text blocks with previews,
+    keeping the conversation structure intact (the model still sees that
+    a tool was called and what the first 200 chars of output were).
+    """
+    target = messages[:-skip_last] if len(messages) > skip_last else messages
+    for msg in target:
+        if not isinstance(msg.get('content'), list):
+            continue
+        for block in msg['content']:
+            btype = block.get('type', '')
+            if btype == 'tool_result':
+                if isinstance(block.get('content'), list):
+                    for sub in block['content']:
+                        if sub.get('type') == 'text' and len(sub.get('text', '')) > max_chars:
+                            sub['text'] = sub['text'][:max_chars] + '\n...[truncated]'
+                elif isinstance(block.get('content'), str) and len(block['content']) > max_chars:
+                    block['content'] = block['content'][:max_chars] + '\n...[truncated]'
+            elif btype == 'text' and len(block.get('text', '')) > max_chars * 5:
+                block['text'] = block['text'][:max_chars * 5] + '\n...[truncated]'
+
+
+def fit_messages_to_limit(body_json: dict, max_kb: int = 100) -> bytes:
+    """Adapt request payload to fit within custom provider size limits.
+
+    Strategy (ordered by how much context is preserved):
+      1. Strip unsupported params (cache_control, metadata, etc.)
+      2. Truncate large content blocks in older messages (keep 200-char previews)
+      3. Truncate ALL content blocks including recent ones
+      4. Sliding window: keep first 6 msgs (task context) + last N msgs,
+         drop the middle (completed work the model no longer needs)
+    """
+    # Phase 1: Strip unsupported parameters
     for param in ('metadata',):
         body_json.pop(param, None)
+    _strip_cache_control(body_json)
 
-    request_body = json.dumps(body_json).encode('utf-8')
+    request_body = json.dumps(body_json, ensure_ascii=False).encode('utf-8')
     if len(request_body) <= max_kb * 1024 or 'messages' not in body_json:
         return request_body
 
@@ -880,78 +929,55 @@ def fit_messages_to_limit(body_json: dict, max_kb: int = 100) -> bytes:
     original_size = len(request_body)
     original_count = len(messages)
 
-    # Phase 2: Truncate large content blocks in older messages.
-    # Keep the last 10 messages untouched — they're the active context.
-    PRESERVE_RECENT = 10
-    BLOCK_MAX_CHARS = 200  # Keep a preview of each block
-
-    for msg in messages[:-PRESERVE_RECENT] if len(messages) > PRESERVE_RECENT else []:
-        if not isinstance(msg.get('content'), list):
-            continue
-        for block in msg['content']:
-            btype = block.get('type', '')
-            # Truncate tool_result text blocks (file contents, command output)
-            if btype == 'tool_result' and isinstance(block.get('content'), list):
-                for sub in block['content']:
-                    if sub.get('type') == 'text' and len(sub.get('text', '')) > BLOCK_MAX_CHARS:
-                        original_text = sub['text']
-                        sub['text'] = original_text[:BLOCK_MAX_CHARS] + f'\n...[truncated {len(original_text)} chars]'
-            elif btype == 'tool_result' and isinstance(block.get('content'), str):
-                if len(block['content']) > BLOCK_MAX_CHARS:
-                    block['content'] = block['content'][:BLOCK_MAX_CHARS] + f'\n...[truncated {len(block["content"])} chars]'
-            elif btype == 'text' and len(block.get('text', '')) > BLOCK_MAX_CHARS * 5:
-                original_text = block['text']
-                block['text'] = original_text[:BLOCK_MAX_CHARS * 5] + f'\n...[truncated {len(original_text)} chars]'
-
-    request_body = json.dumps(body_json).encode('utf-8')
+    # Phase 2: Truncate large blocks in older messages (keep last 10 untouched)
+    _truncate_content_blocks(messages, max_chars=200, skip_last=10)
+    request_body = json.dumps(body_json, ensure_ascii=False).encode('utf-8')
     if len(request_body) <= max_kb * 1024:
-        logger.info(
-            f"[Custom] Trimmed content blocks: "
-            f"{original_size/1024:.0f}KB → {len(request_body)/1024:.0f}KB "
-            f"(all {original_count} messages preserved)"
-        )
+        logger.info(f"[Custom] Phase 2 trimmed: {original_size/1024:.0f}KB → {len(request_body)/1024:.0f}KB (all {original_count} msgs kept)")
         return request_body
 
-    # Phase 3: Truncate even more aggressively — ALL messages including recent ones
-    for msg in messages:
-        if not isinstance(msg.get('content'), list):
-            continue
-        for block in msg['content']:
-            btype = block.get('type', '')
-            if btype == 'tool_result' and isinstance(block.get('content'), list):
-                for sub in block['content']:
-                    if sub.get('type') == 'text' and len(sub.get('text', '')) > BLOCK_MAX_CHARS:
-                        original_text = sub['text']
-                        sub['text'] = original_text[:BLOCK_MAX_CHARS] + f'\n...[truncated {len(original_text)} chars]'
-            elif btype == 'tool_result' and isinstance(block.get('content'), str):
-                if len(block['content']) > BLOCK_MAX_CHARS:
-                    block['content'] = block['content'][:BLOCK_MAX_CHARS] + f'\n...[truncated {len(block["content"])} chars]'
-            elif btype == 'text' and len(block.get('text', '')) > BLOCK_MAX_CHARS * 2:
-                original_text = block['text']
-                block['text'] = original_text[:BLOCK_MAX_CHARS * 2] + f'\n...[truncated {len(original_text)} chars]'
-
-    request_body = json.dumps(body_json).encode('utf-8')
+    # Phase 3: Truncate ALL blocks including recent ones
+    _truncate_content_blocks(messages, max_chars=200, skip_last=0)
+    request_body = json.dumps(body_json, ensure_ascii=False).encode('utf-8')
     if len(request_body) <= max_kb * 1024:
-        logger.info(
-            f"[Custom] Aggressively trimmed content: "
-            f"{original_size/1024:.0f}KB → {len(request_body)/1024:.0f}KB "
-            f"(all {original_count} messages preserved)"
-        )
+        logger.info(f"[Custom] Phase 3 trimmed: {original_size/1024:.0f}KB → {len(request_body)/1024:.0f}KB (all {original_count} msgs kept)")
         return request_body
 
-    # Phase 4: Last resort — drop oldest messages, but keep as many as possible
+    # Phase 4: Sliding window — keep first messages (task context) + last messages (active work)
+    # Drop the MIDDLE of the conversation (completed work), not the beginning
+    KEEP_FIRST = 6  # Task assignment, initial instructions
+    if len(messages) > KEEP_FIRST + 4:
+        head = messages[:KEEP_FIRST]
+        # Figure out how many tail messages we can keep
+        tail_start = KEEP_FIRST
+        while tail_start < len(messages) - 2:
+            test_msgs = head + messages[tail_start:]
+            body_json['messages'] = test_msgs
+            test_body = json.dumps(body_json, ensure_ascii=False).encode('utf-8')
+            if len(test_body) <= max_kb * 1024:
+                request_body = test_body
+                dropped = original_count - len(test_msgs)
+                logger.info(
+                    f"[Custom] Sliding window: {original_size/1024:.0f}KB → {len(request_body)/1024:.0f}KB "
+                    f"(kept first {KEEP_FIRST} + last {len(messages[tail_start:])} msgs, dropped {dropped} middle msgs)"
+                )
+                return request_body
+            tail_start += 2  # Drop 2 more from middle each iteration
+
+    # Phase 5: absolute emergency — just keep last messages that fit
+    body_json['messages'] = messages
     while len(messages) > 2 and len(request_body) > max_kb * 1024:
         messages.pop(0)
         while messages and messages[0].get('role') != 'user':
             messages.pop(0)
-        request_body = json.dumps(body_json).encode('utf-8')
+        request_body = json.dumps(body_json, ensure_ascii=False).encode('utf-8')
 
     logger.info(
-        f"[Custom] Adapted payload to provider limit: "
-        f"{original_size/1024:.0f}KB → {len(request_body)/1024:.0f}KB "
-        f"({original_count} → {len(messages)} messages)"
+        f"[Custom] Emergency trim: {original_size/1024:.0f}KB → {len(request_body)/1024:.0f}KB "
+        f"({original_count} → {len(messages)} msgs)"
     )
     return request_body
+
 
 
 
