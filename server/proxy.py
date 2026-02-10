@@ -857,29 +857,87 @@ async def proxy_to_openrouter(body_json: dict, original_headers: dict, endpoint:
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
-def _strip_cache_control(body_json: dict) -> None:
-    """Remove cache_control directives that custom providers don't support.
+def _sanitize_for_custom_provider(body_json: dict) -> None:
+    """Deep-sanitize request body for custom providers.
 
-    Claude Code adds cache_control for Anthropic's prompt caching feature.
-    Custom providers (e.g. enowX) don't support this and may reject requests
-    containing these directives with 'Malformed request' errors.
+    Claude Code adds non-standard fields (cache_control, citations, source, etc.)
+    that custom providers like enowX don't support and may reject as 'Malformed'.
+    This keeps ONLY standard Anthropic API fields at every level.
     """
-    # Strip from system prompt blocks
+    # Top-level: only keep standard API parameters
+    ALLOWED_TOP_KEYS = {
+        'model', 'messages', 'system', 'tools', 'tool_choice',
+        'max_tokens', 'stream', 'temperature', 'top_p', 'top_k',
+        'stop_sequences',
+    }
+    for key in list(body_json.keys()):
+        if key not in ALLOWED_TOP_KEYS:
+            del body_json[key]
+
+    # Sanitize system prompt blocks
     if isinstance(body_json.get('system'), list):
         for block in body_json['system']:
-            block.pop('cache_control', None)
+            for key in list(block.keys()):
+                if key not in ('type', 'text'):
+                    del block[key]
 
-    # Strip from message content blocks
+    # Sanitize tool definitions
+    if isinstance(body_json.get('tools'), list):
+        ALLOWED_TOOL_KEYS = {'name', 'description', 'input_schema', 'type'}
+        for tool in body_json['tools']:
+            for key in list(tool.keys()):
+                if key not in ALLOWED_TOOL_KEYS:
+                    del tool[key]
+
+    # Sanitize messages
+    ALLOWED_MSG_KEYS = {'role', 'content'}
+    ALLOWED_BLOCK_KEYS = {
+        'text':        {'type', 'text'},
+        'tool_use':    {'type', 'id', 'name', 'input'},
+        'tool_result': {'type', 'tool_use_id', 'content', 'is_error'},
+        'image':       {'type', 'source'},
+    }
+
     if 'messages' in body_json:
         for msg in body_json['messages']:
-            if isinstance(msg.get('content'), list):
-                for block in msg['content']:
-                    block.pop('cache_control', None)
-                    # Also strip from nested tool_result content
-                    if isinstance(block.get('content'), list):
-                        for sub in block['content']:
-                            if isinstance(sub, dict):
-                                sub.pop('cache_control', None)
+            # Strip non-standard message-level keys
+            for key in list(msg.keys()):
+                if key not in ALLOWED_MSG_KEYS:
+                    del msg[key]
+
+            if not isinstance(msg.get('content'), list):
+                continue
+
+            for block in msg['content']:
+                btype = block.get('type', '')
+                allowed = ALLOWED_BLOCK_KEYS.get(btype, {'type'})
+                for key in list(block.keys()):
+                    if key not in allowed:
+                        del block[key]
+
+                # Fix tool_use inputs that are strings instead of dicts
+                # (caused by enowX streaming responses, stored in Claude Code history)
+                if btype == 'tool_use' and isinstance(block.get('input'), str):
+                    raw = block['input'].strip()
+                    if raw:
+                        try:
+                            parsed = json.loads(raw)
+                            block['input'] = parsed if isinstance(parsed, dict) else {}
+                        except json.JSONDecodeError:
+                            block['input'] = {}
+                    else:
+                        block['input'] = {}
+
+                # Sanitize nested tool_result content blocks too
+                if btype == 'tool_result' and isinstance(block.get('content'), list):
+                    for sub in block['content']:
+                        if isinstance(sub, dict):
+                            sub_type = sub.get('type', '')
+                            sub_allowed = ALLOWED_BLOCK_KEYS.get(sub_type, {'type'})
+                            for key in list(sub.keys()):
+                                if key not in sub_allowed:
+                                    del sub[key]
+
 
 
 def _truncate_content_blocks(messages: list, max_chars: int = 200, skip_last: int = 10) -> None:
@@ -916,10 +974,8 @@ def fit_messages_to_limit(body_json: dict, max_kb: int = 100) -> bytes:
       4. Sliding window: keep first 6 msgs (task context) + last N msgs,
          drop the middle (completed work the model no longer needs)
     """
-    # Phase 1: Strip unsupported parameters
-    for param in ('metadata',):
-        body_json.pop(param, None)
-    _strip_cache_control(body_json)
+    # Phase 1: Deep-sanitize — strip ALL non-standard fields from every level
+    _sanitize_for_custom_provider(body_json)
 
     request_body = json.dumps(body_json, ensure_ascii=False).encode('utf-8')
     if len(request_body) <= max_kb * 1024 or 'messages' not in body_json:
