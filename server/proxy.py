@@ -172,23 +172,36 @@ if __name__ == "__main__":
     try:
         # Check and kill any process using the port
         def kill_process_on_port(port):
-            """Find and kill any process listening on the specified port."""
+            """Find and kill any process listening on the specified port, excluding self."""
             try:
                 # Try using lsof
-                pid = subprocess.check_output(["lsof", "-t", f"-i:{port}"], stderr=subprocess.DEVNULL).decode().strip()
-                if pid:
-                    logger.info(f"Found process {pid} using port {port}. Killing it...")
-                    subprocess.run(["kill", "-9", pid], check=True, stderr=subprocess.DEVNULL)
-                    return
-            except (subprocess.CalledProcessError, FileNotFoundError):
-                pass
+                # -t: terse (PIDs only)
+                # -i: internet files
+                output = subprocess.check_output(["lsof", "-t", f"-i:{port}"], stderr=subprocess.DEVNULL).decode().strip()
 
-            try:
-                # Try using ss/netstat and grep if lsof fails (fallback)
-                # ss -lptn 'sport = :8082'
-                pass # Complexity to parse ss output in python without external libs is high, reliable lsof is preferred
-            except Exception:
+                if not output:
+                    return
+
+                pids = [int(p) for p in output.split() if p.strip().isdigit()]
+                my_pid = os.getpid()
+
+                for pid in pids:
+                    if pid == my_pid:
+                        continue
+
+                    logger.info(f"Found process {pid} using port {port}. Killing it...")
+                    try:
+                        os.kill(pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass # Process already gone
+                    except Exception as e:
+                        logger.error(f"Failed to kill process {pid}: {e}")
+
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                # lsof failed or returned nothing
                 pass
+            except Exception as e:
+                logger.warning(f"Error checking for port conflicts: {e}")
 
         kill_process_on_port(PROXY_PORT)
 

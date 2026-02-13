@@ -2,17 +2,29 @@
 # Manage Claude Code Proxy, Antigravity Server, and GitHub Copilot API (Linux)
 # Usage: ./manage-proxy.sh {start|stop|restart|status}
 
-# Fix CRLF line endings
-sed -i 's/\r$//' "${BASH_SOURCE[0]}" 2>/dev/null || true
+# Detect python
+if command -v python3 &>/dev/null; then
+  PYTHON_CMD="python3"
+elif command -v python &>/dev/null; then
+  PYTHON_CMD="python"
+else
+  echo "Error: Python not found."
+  exit 1
+fi
 
-# Ensure standard paths are in PATH
+# Ensure standard paths are in PATH (fixes command not found issues on some VPS)
 export PATH=$PATH:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Fix line endings using the python script (more robust than sed on Windows-edited files)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+"$PYTHON_CMD" "$SCRIPT_DIR/fix_line_endings.py" >/dev/null 2>&1 || true
 
 ACTION=${1:-status}
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="$PROJECT_ROOT/logs"
 PID_FILE="$LOG_DIR/proxy.pid"
 AG_PID_FILE="$LOG_DIR/antigravity.pid"
+CP_PID_FILE="$LOG_DIR/copilot.pid"
 CP_PID_FILE="$LOG_DIR/copilot.pid"
 
 # Prefer python3 explicitly
