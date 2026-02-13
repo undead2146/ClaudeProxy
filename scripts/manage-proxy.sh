@@ -15,6 +15,8 @@ if ! command -v "$PYTHON_CMD" &>/dev/null; then
     PYTHON_CMD="python"
 fi
 
+echo "Using Python: $PYTHON_CMD"
+
 start_antigravity() {
     if [ -f "$AG_PID_FILE" ]; then
         AG_PID=$(cat "$AG_PID_FILE")
@@ -60,6 +62,8 @@ start_proxy() {
 
     echo "[Proxy] Starting server on port 8082..."
     cd "$PROJECT_ROOT/server"
+    # Add server directory to PYTHONPATH for subdirectory imports
+    export PYTHONPATH="$PROJECT_ROOT/server:$PYTHONPATH"
     nohup "$PYTHON_CMD" proxy.py > "$LOG_DIR/proxy.log" 2>&1 &
     PROXY_PID=$!
     echo $PROXY_PID > "$PID_FILE"
@@ -70,9 +74,15 @@ start_proxy() {
 
 stop_all() {
     echo "Stopping all services..."
-    if [ -f "$PID_FILE" ] && kill $(cat "$PID_FILE") 2>/dev/null && rm "$PID_FILE"
-    if [ -f "$AG_PID_FILE" ] && kill $(cat "$AG_PID_FILE") 2>/dev/null && rm "$AG_PID_FILE"
-    if [ -f "$CP_PID_FILE" ] && kill $(cat "$CP_PID_FILE") 2>/dev/null && rm "$CP_PID_FILE"
+    if [ -f "$PID_FILE" ]; then
+        kill $(cat "$PID_FILE") 2>/dev/null && rm "$PID_FILE"
+    fi
+    if [ -f "$AG_PID_FILE" ]; then
+        kill $(cat "$AG_PID_FILE") 2>/dev/null && rm "$AG_PID_FILE"
+    fi
+    if [ -f "$CP_PID_FILE" ]; then
+        kill $(cat "$CP_PID_FILE") 2>/dev/null && rm "$CP_PID_FILE"
+    fi
     echo "All services stopped."
 }
 
@@ -80,13 +90,15 @@ status() {
     echo "--- Service Status ---"
     for service in "Proxy:$PID_FILE" "Antigravity:$AG_PID_FILE" "Copilot:$CP_PID_FILE"; do
         NAME="${service%%:*}"
-        FILE="${service##*:}"
-        if [ -f "$FILE" ] && ps -p $(cat "$FILE") > /dev/null; then
-            echo "$NAME: RUNNING (PID: $(cat $FILE))"
-        else
-            echo "$NAME: STOPPED"
+        FILE="${service#*:}"
+        if [ -f "$FILE" ]; then
+            if ps -p "$(cat "$FILE")" > /dev/null; then
+                echo "$NAME: RUNNING (PID: $(cat "$FILE"))"
+            else
+                echo "$NAME: STOPPED"
+            fi
         fi
-    done
+        done
 }
 
 case "$ACTION" in

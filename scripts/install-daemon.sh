@@ -15,12 +15,12 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # Determine Python command
 if command -v python3 &>/dev/null; then
-    PYTHON_CMD="python3"
+  PYTHON_CMD="python3"
 elif command -v python &>/dev/null; then
-    PYTHON_CMD="python"
+  PYTHON_CMD="python"
 else
-    echo "Error: Neither python3 nor python found in PATH"
-    exit 1
+  echo "Error: Neither python3 nor python found in PATH"
+  exit 1
 fi
 
 echo "Using Python: $PYTHON_CMD"
@@ -32,7 +32,6 @@ echo "--- Claude Proxy Daemon Installer (Linux) ---"
 
 # Create log directory if it doesn't exist
 mkdir -p "$PROJECT_ROOT/logs"
-chown -R "$USER_NAME:$USER_NAME" "$PROJECT_ROOT/logs"
 
 # Ensure scripts are executable
 chmod +x "$PROJECT_ROOT/scripts/manage-proxy.sh"
