@@ -3,6 +3,7 @@ import os
 import sys
 import subprocess
 import getpass
+import time
 
 def main():
     if os.geteuid() != 0:
@@ -26,7 +27,7 @@ def main():
     # This prevents 'Address already in use' errors if a root-owned orphan is running
     try:
         print("Checking for existing processes on port 8082...")
-        # Use lsof or ss to find PID
+        # Use lsof to find PID
         cmd = ["lsof", "-t", "-i:8082"]
         try:
             pids = subprocess.check_output(cmd).decode().strip().split()

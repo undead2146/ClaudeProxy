@@ -92,6 +92,7 @@ if __name__ == "__main__":
     import signal
     import subprocess
     import sys
+    import os
 
     # Load configuration from file
     load_config()
