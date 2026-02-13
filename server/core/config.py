@@ -34,11 +34,11 @@ SONNET_PROVIDER_API_KEY = os.getenv("SONNET_PROVIDER_API_KEY")
 SONNET_PROVIDER_BASE_URL = os.getenv("SONNET_PROVIDER_BASE_URL")
 
 # ---------------------------------------------------------------------------
-# Z.AI model mappings
+# Z.AI/GLM model mappings
 # ---------------------------------------------------------------------------
-ZAI_HAIKU_MODEL = os.getenv("ZAI_HAIKU_MODEL") or os.getenv("GLM_HAIKU_MODEL", "glm-5")
-ZAI_SONNET_MODEL = os.getenv("ZAI_SONNET_MODEL") or os.getenv("GLM_SONNET_MODEL", "glm-5")
-ZAI_OPUS_MODEL = os.getenv("ZAI_OPUS_MODEL") or os.getenv("GLM_OPUS_MODEL", "glm-5")
+ZAI_HAIKU_MODEL = os.getenv("GLM_HAIKU_MODEL") or os.getenv("ZAI_HAIKU_MODEL", "glm-4.7")
+ZAI_SONNET_MODEL = os.getenv("GLM_SONNET_MODEL") or os.getenv("ZAI_SONNET_MODEL", "glm-4.7")
+ZAI_OPUS_MODEL = os.getenv("GLM_OPUS_MODEL") or os.getenv("ZAI_OPUS_MODEL", "glm-4.7")
 
 # ---------------------------------------------------------------------------
 # Antigravity configuration
