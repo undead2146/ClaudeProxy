@@ -30,6 +30,23 @@ def main():
     log_dir = os.path.join(project_root, "logs")
     os.makedirs(log_dir, exist_ok=True)
 
+    # Fix permissions: log dir must be writable by the service user
+    # Since we are running as root, os.makedirs created it as root
+    import shutil
+    import pwd
+    try:
+        pw = pwd.getpwnam(user_name)
+        os.chown(log_dir, pw.pw_uid, pw.pw_gid)
+        # Recursive chmod/chown for logs dir just in case
+        for root, dirs, files in os.walk(log_dir):
+            for d in dirs:
+                os.chown(os.path.join(root, d), pw.pw_uid, pw.pw_gid)
+            for f in files:
+                os.chown(os.path.join(root, f), pw.pw_uid, pw.pw_gid)
+        print(f"Fixed permissions for {log_dir} (Owner: {user_name})")
+    except Exception as e:
+        print(f"Warning: Could not set permissions for {log_dir}: {e}")
+
     # Create systemd service file content
     # Note: We use the python script for management now to avoid shebang issues
     manage_script = os.path.join(script_dir, "manage_proxy.py")
