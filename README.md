@@ -1,4 +1,4 @@
-﻿# Claude Code Proxy: Weekly Rate Limits? Resolved!
+﻿# Claude Code Proxy: Weekly Rate Limits? Resolved
 
 Route **each Claude Code model tier** to **different providers**! Use free **Gemini 3** models through **Antigravity**, direct **Anthropic API**, **GitHub Copilot** access, or **Z.AI** models - all at the same time through one unified proxy with zero-downtime switching via web dashboard.
 
@@ -9,6 +9,7 @@ Apparently I'm one of the "2%" of users that should encounter or be affected by 
 ## 🚀 Quick Start
 
 **Windows (PowerShell):**
+
 ```powershell
 # 1. Install dependencies
 pip install -r requirements.txt
@@ -20,21 +21,36 @@ npm install -g antigravity-claude-proxy@latest
 cd scripts
 .\manage-proxy.ps1 start
 
-# 4. Configure Claude Code CLI
+# 4. (Optional) Install as Background Daemon (Service)
+# This will make the proxy start automatically on boot
+.\install-daemon.ps1
+
+# 5. Configure Claude Code CLI
 $env:ANTHROPIC_BASE_URL = "http://localhost:8082"
 
 # 5. Open dashboard to configure routing
 # Browser: http://localhost:8082/dashboard
 ```
 
-## 📊 Web Dashboard
+## �️ Utility Scripts
 
-**Main Dashboard:** http://localhost:8082/dashboard  
-**Proxy Logs:** http://localhost:8082/logs.html  
-**Antigravity Dashboard:** http://localhost:8081 (when running)  
-**Health Check:** http://localhost:8082/health
+The `scripts/` directory contains several tools to help manage your proxy:
+
+- **`manage-proxy.[ps1|sh]`** - Unified tool to start, stop, restart, and check status of all services.
+- **`install-daemon.[ps1|sh]`** - Automatically installs the proxy as a system service / background task.
+- **`setup-firewall.ps1`** - Configures Windows Firewall to allow local network access (port 8082).
+- **`start-tunnel.[bat|sh]`** - Quickly sets up a public Cloudflare tunnel to your local proxy.
+- **`verify-tunnel.sh`** - Diagnostics tool to ensure your tunnel is working correctly.
+
+## �📊 Web Dashboard
+
+**Main Dashboard:** <http://localhost:8082/dashboard>  
+**Proxy Logs:** <http://localhost:8082/logs.html>  
+**Antigravity Dashboard:** <http://localhost:8081> (when running)  
+**Health Check:** <http://localhost:8082/health>
 
 ### Dashboard Features
+
 - **Live Provider Status** - See which providers are configured and available.
 - **Model Selection** - Choose specific models for Sonnet, Haiku, and Opus tiers.
 - **Instant Updates** - Changes apply immediately without restart.
@@ -66,6 +82,7 @@ Opus   (tier)      ──▶  GitHub Copilot (Claude 3.5 Opus)
 Antigravity proxies Claude API calls to Google's Gemini models through their AI Studio infrastructure.
 
 **Setup:**
+
 ```powershell
 # Install globally
 npm install -g antigravity-claude-proxy@latest
@@ -75,6 +92,7 @@ npm install -g antigravity-claude-proxy@latest
 ```
 
 **Features:**
+
 - ✅ Free Gemini 3 Flash, Pro models.
 - ✅ Claude models via Gemini API translation.
 - ✅ Multiple account support.
@@ -84,6 +102,7 @@ npm install -g antigravity-claude-proxy@latest
 Use official Anthropic API with your API key.
 
 **Setup:**
+
 - Add `ANTHROPIC_API_KEY=sk-ant-xxx` to your `.env` file.
 
 ### GitHub Copilot
@@ -91,6 +110,7 @@ Use official Anthropic API with your API key.
 Use Claude models through your GitHub Copilot subscription.
 
 **Setup:**
+
 - Add `GITHUB_COPILOT_API_KEY=ghu_xxx` to your `.env` file.
 
 ### Z.AI (Zhipu)
@@ -98,6 +118,7 @@ Use Claude models through your GitHub Copilot subscription.
 Fast Chinese language models from Zhipu AI.
 
 **Setup:**
+
 - Add `ZAI_API_KEY=your-key` to your `.env` file.
 
 ## 🛠️ Management Commands
@@ -118,11 +139,13 @@ All operations are handled via the unified `manage-proxy.ps1` script in the `scr
 The proxy is configured to listen on `0.0.0.0` (all interfaces). To allow other PCs to use it:
 
 **Add Firewall Rule (Admin Required):**
+
 ```powershell
 .\scripts\setup-firewall.ps1
 ```
 
 **Find Server IP:**
+
 ```powershell
 Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -like "192.168.*" }
 ```
@@ -132,12 +155,14 @@ Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -like "192.16
 On another PC on the same network:
 
 1. **Configure Environment:**
+
 ```powershell
 $env:ANTHROPIC_BASE_URL = "http://SERVER_IP:8082"
 ```
 
-2. **Update Settings:**
+1. **Update Settings:**
 Edit `%USERPROFILE%\.claude\settings.json`:
+
 ```json
 {
   "env": {
@@ -151,6 +176,7 @@ Edit `%USERPROFILE%\.claude\settings.json`:
 To have the proxy start automatically when Windows boots (regardless of login):
 
 **Install Task (Admin Required):**
+
 ```powershell
 .\scripts\install-autostart.ps1
 ```
@@ -167,18 +193,24 @@ To have the proxy start automatically when Windows boots (regardless of login):
 ## 🔧 Troubleshooting
 
 ### "Max retries exceeded" / 429 Errors
+
 This happens when Google accounts hit rate limits from too many requests.
+
 - **Solution:** Add more Google accounts to Antigravity to distribute the load.
 
 ### Account Marked "Unhealthy"
+
 If an account hits too many rate limits, Antigravity marks it unhealthy.
-- **Solution:** 
+
+- **Solution:**
   1. Delete `C:\Users\USER\.config\antigravity-proxy\accounts.json`.
   2. Restart proxy: `.\manage-proxy.ps1 restart`.
-  3. Re-add account at http://localhost:8081.
+  3. Re-add account at <http://localhost:8081>.
 
 ### Proxy Not Intercepting
+
 Verify `ANTHROPIC_BASE_URL` is set correctly:
+
 ```powershell
 echo $env:ANTHROPIC_BASE_URL  # Should be http://localhost:8082
 ```
