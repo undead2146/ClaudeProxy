@@ -4,6 +4,9 @@
 
 set -e
 
+# Fix CRLF line endings in this script (in case it was uploaded from Windows)
+sed -i 's/\r$//' "${BASH_SOURCE[0]}" 2>/dev/null || true
+
 # Check for root
 if [ "$EUID" -ne 0 ]; then
   echo "Please run as root (use sudo)"
@@ -32,6 +35,10 @@ echo "--- Claude Proxy Daemon Installer (Linux) ---"
 
 # Create log directory if it doesn't exist
 mkdir -p "$PROJECT_ROOT/logs"
+
+# Fix CRLF line endings in other scripts
+sed -i 's/\r$//' "$PROJECT_ROOT/scripts/manage-proxy.sh"
+sed -i 's/\r$//' "$PROJECT_ROOT/server/proxy.py"
 
 # Ensure scripts are executable
 chmod +x "$PROJECT_ROOT/scripts/manage-proxy.sh"

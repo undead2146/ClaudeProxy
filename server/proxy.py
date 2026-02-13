@@ -90,6 +90,8 @@ if __name__ == "__main__":
     import uvicorn
     import atexit
     import signal
+    import subprocess
+    import sys
 
     # Load configuration from file
     load_config()
@@ -168,6 +170,28 @@ if __name__ == "__main__":
     signal.signal(signal.SIGINT, lambda s, f: cleanup())
 
     try:
+        # Check and kill any process using the port
+        def kill_process_on_port(port):
+            """Find and kill any process listening on the specified port."""
+            try:
+                # Try using lsof
+                pid = subprocess.check_output(["lsof", "-t", f"-i:{port}"], stderr=subprocess.DEVNULL).decode().strip()
+                if pid:
+                    logger.info(f"Found process {pid} using port {port}. Killing it...")
+                    subprocess.run(["kill", "-9", pid], check=True, stderr=subprocess.DEVNULL)
+                    return
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                pass
+
+            try:
+                # Try using ss/netstat and grep if lsof fails (fallback)
+                # ss -lptn 'sport = :8082'
+                pass # Complexity to parse ss output in python without external libs is high, reliable lsof is preferred
+            except Exception:
+                pass
+
+        kill_process_on_port(PROXY_PORT)
+
         uvicorn.run(app, host="0.0.0.0", port=PROXY_PORT, log_level="info")
     finally:
         cleanup()

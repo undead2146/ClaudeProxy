@@ -2,6 +2,12 @@
 # Manage Claude Code Proxy, Antigravity Server, and GitHub Copilot API (Linux)
 # Usage: ./manage-proxy.sh {start|stop|restart|status}
 
+# Fix CRLF line endings
+sed -i 's/\r$//' "${BASH_SOURCE[0]}" 2>/dev/null || true
+
+# Ensure standard paths are in PATH
+export PATH=$PATH:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
 ACTION=${1:-status}
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="$PROJECT_ROOT/logs"
