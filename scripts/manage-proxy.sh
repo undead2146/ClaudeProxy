@@ -1,14 +1,19 @@
 #!/bin/bash
 # Manage Claude Code Proxy, Antigravity Server, and GitHub Copilot API (Linux)
+# Usage: ./manage-proxy.sh {start|stop|restart|status}
 
 ACTION=${1:-status}
-PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="$PROJECT_ROOT/logs"
-mkdir -p "$LOG_DIR"
-
 PID_FILE="$LOG_DIR/proxy.pid"
 AG_PID_FILE="$LOG_DIR/antigravity.pid"
 CP_PID_FILE="$LOG_DIR/copilot.pid"
+
+# Prefer python3 explicitly
+PYTHON_CMD="python3"
+if ! command -v "$PYTHON_CMD" &>/dev/null; then
+    PYTHON_CMD="python"
+fi
 
 start_antigravity() {
     if [ -f "$AG_PID_FILE" ]; then
@@ -20,7 +25,7 @@ start_antigravity() {
     fi
 
     echo "[Antigravity] Starting server on port 8081..."
-    PORT=8081 nohup antigravity-claude-proxy start > "$LOG_DIR/antigravity.log" 2>&1 &
+    PORT=8081 nohup npx antigravity-claude-proxy@latest start --port $PORT > "$LOG_DIR/antigravity.log" 2>&1 &
     AG_PID=$!
     echo $AG_PID > "$AG_PID_FILE"
     sleep 2
@@ -45,9 +50,6 @@ start_copilot() {
 }
 
 start_proxy() {
-    start_antigravity
-    start_copilot
-
     if [ -f "$PID_FILE" ]; then
         PROXY_PID=$(cat "$PID_FILE")
         if ps -p "$PROXY_PID" > /dev/null; then
@@ -58,18 +60,19 @@ start_proxy() {
 
     echo "[Proxy] Starting server on port 8082..."
     cd "$PROJECT_ROOT/server"
-    nohup python3 proxy.py > "$LOG_DIR/proxy.log" 2>&1 &
+    nohup "$PYTHON_CMD" proxy.py > "$LOG_DIR/proxy.log" 2>&1 &
     PROXY_PID=$!
     echo $PROXY_PID > "$PID_FILE"
+    sleep 2
     echo "[Proxy] Started (PID: $PROXY_PID)"
     echo "Dashboard: http://localhost:8082/dashboard"
 }
 
 stop_all() {
     echo "Stopping all services..."
-    [ -f "$PID_FILE" ] && kill $(cat "$PID_FILE") && rm "$PID_FILE"
-    [ -f "$AG_PID_FILE" ] && kill $(cat "$AG_PID_FILE") && rm "$AG_PID_FILE"
-    [ -f "$CP_PID_FILE" ] && kill $(cat "$CP_PID_FILE") && rm "$CP_PID_FILE"
+    if [ -f "$PID_FILE" ] && kill $(cat "$PID_FILE") 2>/dev/null && rm "$PID_FILE"
+    if [ -f "$AG_PID_FILE" ] && kill $(cat "$AG_PID_FILE") 2>/dev/null && rm "$AG_PID_FILE"
+    if [ -f "$CP_PID_FILE" ] && kill $(cat "$CP_PID_FILE") 2>/dev/null && rm "$CP_PID_FILE"
     echo "All services stopped."
 }
 
@@ -77,9 +80,9 @@ status() {
     echo "--- Service Status ---"
     for service in "Proxy:$PID_FILE" "Antigravity:$AG_PID_FILE" "Copilot:$CP_PID_FILE"; do
         NAME="${service%%:*}"
-        FILE="${service#*:}"
+        FILE="${service##*:}"
         if [ -f "$FILE" ] && ps -p $(cat "$FILE") > /dev/null; then
-            echo "$NAME: RUNNING (PID: $(cat "$FILE"))"
+            echo "$NAME: RUNNING (PID: $(cat $FILE))"
         else
             echo "$NAME: STOPPED"
         fi
@@ -104,4 +107,5 @@ case "$ACTION" in
     *)
         echo "Usage: $0 {start|stop|restart|status}"
         exit 1
+        ;;
 esac

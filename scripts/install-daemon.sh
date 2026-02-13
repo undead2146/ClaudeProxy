@@ -1,6 +1,6 @@
 #!/bin/bash
 # Claude Proxy systemd Installation Script
-# This script installs the Claude Proxy as a systemd service on Linux.
+# This script installs Claude Proxy as a systemd service on Linux.
 
 set -e
 
@@ -10,8 +10,22 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
-PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-USER_NAME=$(logname || echo $SUDO_USER)
+# Get project root (2 levels up from scripts/ dir)
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Determine Python command
+if command -v python3 &>/dev/null; then
+    PYTHON_CMD="python3"
+elif command -v python &>/dev/null; then
+    PYTHON_CMD="python"
+else
+    echo "Error: Neither python3 nor python found in PATH"
+    exit 1
+fi
+
+echo "Using Python: $PYTHON_CMD"
+
+USER_HOME=$(getent passwd "$USER" | cut -d: -f7)
 SERVICE_FILE="/etc/systemd/system/claude-proxy.service"
 
 echo "--- Claude Proxy Daemon Installer (Linux) ---"
@@ -25,7 +39,7 @@ chmod +x "$PROJECT_ROOT/scripts/manage-proxy.sh"
 chmod +x "$PROJECT_ROOT/server/proxy.py"
 
 # Create systemd service file
-cat <<EOF > "$SERVICE_FILE"
+cat > "$SERVICE_FILE" <<EOF
 [Unit]
 Description=Claude Code Proxy Daemon
 After=network.target
