@@ -22,6 +22,30 @@ def main():
     user_name = os.getenv('SUDO_USER') or getpass.getuser()
     print(f"Installing as user: {user_name}")
 
+    # 1. Kill any existing processes on port 8082 (as root)
+    # This prevents 'Address already in use' errors if a root-owned orphan is running
+    try:
+        print("Checking for existing processes on port 8082...")
+        # Use lsof or ss to find PID
+        cmd = ["lsof", "-t", "-i:8082"]
+        try:
+            pids = subprocess.check_output(cmd).decode().strip().split()
+            for pid in pids:
+                if pid:
+                    print(f"Killing existing process {pid} on port 8082...")
+                    os.kill(int(pid), 9)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+             pass # No process found or lsof missing
+
+        # Fallback to fuser if lsof missing
+        try:
+            subprocess.run(["fuser", "-k", "8082/tcp"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+        except FileNotFoundError:
+            pass
+
+    except Exception as e:
+        print(f"Warning: Failed to cleanup port 8082: {e}")
+
     service_file_path = "/etc/systemd/system/claude-proxy.service"
 
     print("--- Claude Proxy Daemon Installer (Linux/Python) ---")
