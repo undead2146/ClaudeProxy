@@ -504,7 +504,8 @@ async def delete_favorite_endpoint(request: Request):
 
 async def dashboard_endpoint(request: Request):
     """Serve a simple HTML dashboard for configuration management."""
-    dashboard_file = Path(__file__).parent / "dashboard.html"
+    # HTML files are in the server/ root, one level up from api/
+    dashboard_file = Path(__file__).parent.parent / "dashboard.html"
     if dashboard_file.exists():
         with open(dashboard_file, "r", encoding="utf-8") as f:
             html = f.read()
@@ -529,8 +530,9 @@ async def clear_logs_endpoint(request: Request):
 
 async def logs_page_endpoint(request: Request):
     """Serve dedicated logs page."""
-    logs_html_path = os.path.join(os.path.dirname(__file__), 'logs.html')
-    if os.path.exists(logs_html_path):
+    # HTML files are in the server/ root, one level up from api/
+    logs_html_path = Path(__file__).parent.parent / "logs.html"
+    if logs_html_path.exists():
         with open(logs_html_path, 'r', encoding='utf-8') as f:
             html = f.read()
         return HTMLResponse(content=html)
@@ -540,8 +542,9 @@ async def logs_page_endpoint(request: Request):
 
 async def usage_page_endpoint(request: Request):
     """Serve dedicated usage statistics page."""
-    usage_html_path = os.path.join(os.path.dirname(__file__), 'usage-stats.html')
-    if os.path.exists(usage_html_path):
+    # HTML files are in the server/ root, one level up from api/
+    usage_html_path = Path(__file__).parent.parent / "usage-stats.html"
+    if usage_html_path.exists():
         with open(usage_html_path, 'r', encoding='utf-8') as f:
             html = f.read()
         return HTMLResponse(content=html)
