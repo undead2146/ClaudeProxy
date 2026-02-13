@@ -173,35 +173,92 @@ if __name__ == "__main__":
         # Check and kill any process using the port
         def kill_process_on_port(port):
             """Find and kill any process listening on the specified port, excluding self."""
-            try:
-                # Try using lsof
-                # -t: terse (PIDs only)
-                # -i: internet files
-                output = subprocess.check_output(["lsof", "-t", f"-i:{port}"], stderr=subprocess.DEVNULL).decode().strip()
+            logger.info(f"Checking for existing processes on port {port}...")
 
-                if not output:
-                    return
+            pids_to_kill = set()
+            my_pid = os.getpid()
 
-                pids = [int(p) for p in output.split() if p.strip().isdigit()]
-                my_pid = os.getpid()
+            # Methods to find PIDs
+            methods = []
 
-                for pid in pids:
-                    if pid == my_pid:
-                        continue
+            # Method 1: lsof
+            def check_lsof():
+                try:
+                    # -t: terse (PIDs only)
+                    # -i: internet files
+                    output = subprocess.check_output(["lsof", "-t", f"-i:{port}"], stderr=subprocess.DEVNULL).decode().strip()
+                    if output:
+                        return [int(p) for p in output.split() if p.strip().isdigit()]
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    pass
+                return []
+            methods.append(check_lsof)
 
-                    logger.info(f"Found process {pid} using port {port}. Killing it...")
-                    try:
-                        os.kill(pid, signal.SIGKILL)
-                    except ProcessLookupError:
-                        pass # Process already gone
-                    except Exception as e:
-                        logger.error(f"Failed to kill process {pid}: {e}")
+            # Method 2: ss (socket statistics)
+            def check_ss():
+                try:
+                    # -lptn: listening, processes, tcp, numeric
+                    # output format: State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess
+                    output = subprocess.check_output(["ss", "-lptn", f"sport = :{port}"], stderr=subprocess.DEVNULL).decode().strip()
+                    found_pids = []
+                    for line in output.splitlines():
+                        if f":{port}" in line:
+                            # Extract pid=1234 from "users:(("python",pid=1234,fd=3))"
+                            parts = line.split("pid=")
+                            for part in parts[1:]:
+                                pid_str = part.split(",")[0]
+                                if pid_str.isdigit():
+                                    found_pids.append(int(pid_str))
+                    return found_pids
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    pass
+                return []
+            methods.append(check_ss)
 
-            except (subprocess.CalledProcessError, FileNotFoundError):
-                # lsof failed or returned nothing
-                pass
-            except Exception as e:
-                logger.warning(f"Error checking for port conflicts: {e}")
+            # Method 3: netstat (fallback)
+            def check_netstat():
+                try:
+                    # -lnp: listening, numeric, program
+                    output = subprocess.check_output(["netstat", "-lnp"], stderr=subprocess.DEVNULL).decode().strip()
+                    found_pids = []
+                    for line in output.splitlines():
+                        if f":{port} " in line:
+                            # tcp 0 0 0.0.0.0:8082 0.0.0.0:* LISTEN 1234/python
+                            parts = line.split()
+                            for part in parts:
+                                if "/" in part and part.split("/")[0].isdigit():
+                                    found_pids.append(int(part.split("/")[0]))
+                    return found_pids
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    pass
+                return []
+            methods.append(check_netstat)
+
+            # Execute checks
+            for method in methods:
+                try:
+                    pids = method()
+                    for pid in pids:
+                        if pid != my_pid:
+                            pids_to_kill.add(pid)
+                except Exception as e:
+                    logger.debug(f"Port check method failed: {e}")
+
+            if not pids_to_kill:
+                logger.info(f"No conflicting processes found on port {port}.")
+                return
+
+            logger.info(f"Found conflicting PIDs on port {port}: {pids_to_kill}")
+
+            for pid in pids_to_kill:
+                logger.info(f"Killing process {pid} to free port {port}...")
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                    logger.info(f"Killed process {pid}.")
+                except ProcessLookupError:
+                    logger.info(f"Process {pid} already gone.")
+                except Exception as e:
+                    logger.error(f"Failed to kill process {pid}: {e}")
 
         kill_process_on_port(PROXY_PORT)
 
