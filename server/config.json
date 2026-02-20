@@ -1,9 +1,9 @@
 {
   "sonnet_provider": "custom",
   "haiku_provider": "custom",
-  "opus_provider": "zai",
+  "opus_provider": "anthropic",
   "sonnet_model": "claude-sonnet-4.5-thinking",
   "haiku_model": "claude-sonnet-4.5-thinking",
-  "opus_model": "glm-4.7",
-  "last_updated": "2026-02-13T10:04:23.814832"
+  "opus_model": "claude-opus-4.6",
+  "last_updated": "2026-02-14T23:08:53.460953"
 }
