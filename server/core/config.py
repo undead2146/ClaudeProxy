@@ -208,19 +208,51 @@ def save_config():
 
 def build_custom_provider_models() -> list:
     """Build the custom provider models list from environment variables."""
-    models = []
+    # Latest and best models only
+    models = [
+        # Claude (latest only)
+        "claude-opus-4.6",
+        "claude-sonnet-4.5",
+        "claude-haiku-4.5",
 
-    sonnet_model = os.getenv("CUSTOM_PROVIDER_SONNET_MODEL", "claude-sonnet-4.5")
-    haiku_model = os.getenv("CUSTOM_PROVIDER_HAIKU_MODEL", "claude-haiku-4.5")
-    opus_model = os.getenv("CUSTOM_PROVIDER_OPUS_MODEL", "claude-opus-4.5")
+        # DeepSeek
+        "deepseek-v3.2",
 
-    if sonnet_model:
+        # enowX Labs
+        "enowx-default",
+
+        # Google Gemini (latest only)
+        "gemini-3.1-pro",
+        "gemini-3.0-pro",
+        "gemini-2.5-pro",
+
+        # Zhipu
+        "glm-5.0",
+
+        # OpenAI (latest only)
+        "gpt-5.4",
+        "gpt-5.3-codex",
+
+        # Kimi
+        "kimi-k2.5",
+
+        # Minimax
+        "minimax-m1",
+    ]
+
+    # Allow environment variable overrides for the main three tiers
+    sonnet_model = os.getenv("CUSTOM_PROVIDER_SONNET_MODEL")
+    haiku_model = os.getenv("CUSTOM_PROVIDER_HAIKU_MODEL")
+    opus_model = os.getenv("CUSTOM_PROVIDER_OPUS_MODEL")
+
+    if sonnet_model and sonnet_model not in models:
         models.append(sonnet_model)
-    if haiku_model:
+    if haiku_model and haiku_model not in models:
         models.append(haiku_model)
-    if opus_model:
+    if opus_model and opus_model not in models:
         models.append(opus_model)
 
+    # Remove duplicates while preserving order
     seen = set()
     unique_models = []
     for model in models:
