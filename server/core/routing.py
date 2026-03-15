@@ -101,10 +101,9 @@ def get_provider_config(model: str) -> Tuple[Optional[str], Optional[str], str, 
         elif current_sonnet_provider == "custom":
             custom_api_key = os.getenv("CUSTOM_PROVIDER_API_KEY")
             custom_base_url = os.getenv("CUSTOM_PROVIDER_BASE_URL")
-            custom_sonnet_model = os.getenv("CUSTOM_PROVIDER_SONNET_MODEL", "claude-sonnet-4.5")
             if custom_api_key and custom_base_url:
-                logger.info(f"[Proxy] Routing Sonnet  Custom Provider ({custom_sonnet_model})")
-                return custom_api_key, custom_base_url, tier, custom_sonnet_model, "custom"
+                logger.info(f"[Proxy] Routing Sonnet  Custom Provider ({sonnet_model})")
+                return custom_api_key, custom_base_url, tier, sonnet_model, "custom"
 
         # Fallback — either anthropic was explicitly chosen, or the chosen provider is misconfigured
         if current_sonnet_provider == "anthropic":
@@ -132,10 +131,9 @@ def get_provider_config(model: str) -> Tuple[Optional[str], Optional[str], str, 
         elif current_haiku_provider == "custom":
             custom_api_key = os.getenv("CUSTOM_PROVIDER_API_KEY")
             custom_base_url = os.getenv("CUSTOM_PROVIDER_BASE_URL")
-            custom_haiku_model = os.getenv("CUSTOM_PROVIDER_HAIKU_MODEL", "claude-haiku-4.5")
             if custom_api_key and custom_base_url:
-                logger.info(f"[Proxy] Routing Haiku  Custom Provider ({custom_haiku_model})")
-                return custom_api_key, custom_base_url, tier, custom_haiku_model, "custom"
+                logger.info(f"[Proxy] Routing Haiku  Custom Provider ({haiku_model})")
+                return custom_api_key, custom_base_url, tier, haiku_model, "custom"
 
         if current_haiku_provider == "anthropic":
             logger.info(f"[Proxy] Routing Haiku → Anthropic (OAuth) using original model: {model}")
@@ -161,10 +159,9 @@ def get_provider_config(model: str) -> Tuple[Optional[str], Optional[str], str, 
         elif current_opus_provider == "custom":
             custom_api_key = os.getenv("CUSTOM_PROVIDER_API_KEY")
             custom_base_url = os.getenv("CUSTOM_PROVIDER_BASE_URL")
-            custom_opus_model = os.getenv("CUSTOM_PROVIDER_OPUS_MODEL", "claude-opus-4.5")
             if custom_api_key and custom_base_url:
-                logger.info(f"[Proxy] Routing Opus  Custom Provider ({custom_opus_model})")
-                return custom_api_key, custom_base_url, tier, custom_opus_model, "custom"
+                logger.info(f"[Proxy] Routing Opus  Custom Provider ({opus_model})")
+                return custom_api_key, custom_base_url, tier, opus_model, "custom"
 
         if current_opus_provider == "anthropic":
             logger.info(f"[Proxy] Routing Opus → Anthropic (OAuth) using original model: {model}")
