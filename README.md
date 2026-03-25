@@ -29,7 +29,7 @@ cd scripts
 $env:ANTHROPIC_BASE_URL = "http://localhost:8082"
 
 # 5. Open dashboard to configure routing
-# Browser: http://localhost:8082/dashboard
+# Browser: http://localhost:8082/
 ```
 
 ## �️ Utility Scripts
@@ -44,9 +44,9 @@ The `scripts/` directory contains several tools to help manage your proxy:
 
 ## �📊 Web Dashboard
 
-**Main Dashboard:** <http://localhost:8082/dashboard>  
-**Proxy Logs:** <http://localhost:8082/logs.html>  
-**Antigravity Dashboard:** <http://localhost:8081> (when running)  
+**Main Dashboard:** <http://localhost:8082/dashboard>
+**Proxy Logs:** <http://localhost:8082/logs.html>
+**Antigravity Dashboard:** <http://localhost:8081> (when running)
 **Health Check:** <http://localhost:8082/health>
 
 ### Dashboard Features

@@ -21,10 +21,11 @@ from core.config import (
     ENABLE_COPILOT, GITHUB_COPILOT_BASE_URL,
     OPENROUTER_API_KEY,
     ANTHROPIC_BASE_URL,
-    FAVORITES_FILE,
     save_config, build_custom_provider_models,
     get_sonnet_provider, get_haiku_provider, get_opus_provider,
+    providers_lock, save_custom_providers,
 )
+import core.config as config
 from core.oauth import get_oauth_token, has_oauth_credentials
 from core.routing import get_provider_config
 from core.sanitize import is_reasoning_model, filter_beta_header
@@ -32,6 +33,7 @@ from core.providers import (
     proxy_to_antigravity, proxy_to_copilot, proxy_to_openrouter, proxy_to_custom,
     token_tracker,
 )
+from core.copilot import copilot_manager
 
 
 # ---------------------------------------------------------------------------
@@ -114,7 +116,7 @@ async def proxy_request(request: Request, endpoint: str) -> JSONResponse | Strea
         # Route to Custom provider
         elif provider_type == "custom":
             logger.info(f"[Proxy] {original_model}  Custom Provider ({translated_model})")
-            return await proxy_to_custom(body_json, original_headers, endpoint)
+            return await proxy_to_custom(body_json, original_headers, endpoint, api_key=api_key, base_url=base_url)
 
         # Route to Z.AI provider
         elif api_key and base_url and provider_type in ["glm", "zai"]:
@@ -192,9 +194,14 @@ async def proxy_request(request: Request, endpoint: str) -> JSONResponse | Strea
                 logger.info(f"[Proxy] Response status: {response.status_code}")
 
                 if response.status_code != 200:
+                    try:
+                        error_content = response.json()
+                    except json.JSONDecodeError:
+                        error_content = {"error": response.text[:1000] or "Unknown error (non-JSON response)"}
+                    
                     logger.error(f"[Proxy] Error: {response.text[:500]}")
                     return JSONResponse(
-                        content=response.json(),
+                        content=error_content,
                         status_code=response.status_code,
                         headers={k: v for k, v in response.headers.items() if k.lower() not in ['content-encoding', 'content-length', 'transfer-encoding']},
                     )
@@ -269,29 +276,19 @@ async def health_check(request: Request):
         except Exception:
             antigravity_status = "not_running"
 
+    with config_lock:
+        reactors = runtime_config.get("reactors", [])
+        routing_status = {r["id"]: r["provider_id"] for r in reactors}
+
     return JSONResponse(content={
         "status": "healthy",
-        "providers": {
-            "zai": {
-                "haiku": {"model": ZAI_HAIKU_MODEL, "provider_set": bool(HAIKU_PROVIDER_BASE_URL)},
-                "sonnet": {"uses_oauth": not bool(SONNET_PROVIDER_API_KEY), "oauth_token_available": has_oauth_credentials()},
-            },
-            "antigravity": {
-                "enabled": ANTIGRAVITY_ENABLED,
-                "status": antigravity_status,
-                "port": ANTIGRAVITY_PORT,
-                "models": {
-                    "sonnet": ANTIGRAVITY_SONNET_MODEL if get_sonnet_provider() == "antigravity" else None,
-                    "haiku": ANTIGRAVITY_HAIKU_MODEL if get_haiku_provider() == "antigravity" else None,
-                    "opus": ANTIGRAVITY_OPUS_MODEL if get_opus_provider() == "antigravity" else None,
-                }
-            }
+        "antigravity": {
+            "enabled": ANTIGRAVITY_ENABLED,
+            "status": antigravity_status,
+            "port": ANTIGRAVITY_PORT
         },
-        "routing": {
-            "sonnet": get_sonnet_provider(),
-            "haiku": get_haiku_provider(),
-            "opus": get_opus_provider(),
-        }
+        "routing": routing_status,
+        "reactors": reactors
     })
 
 
@@ -308,8 +305,13 @@ async def get_config_endpoint(request: Request):
         "anthropic": has_oauth_credentials(),
         "copilot": ENABLE_COPILOT,
         "openrouter": bool(OPENROUTER_API_KEY),
-        "custom": bool(custom_api_key and custom_base_url)
+        "custom": True  # Always available now as dynamic providers
     }
+
+    # Add dynamic providers to availability
+    with providers_lock:
+        for provider in config.custom_providers:
+            providers_available[provider["id"]] = True
 
     available_models = {
         "antigravity": [
@@ -332,25 +334,11 @@ async def get_config_endpoint(request: Request):
             "claude-opus-4.6",
             "claude-3-7-sonnet-20250219"
         ],
-        "copilot": [
-            "gpt-4.1",
-            "gpt-5-mini",
-            "grok-code-fast-1",
-            "raptor-mini",
-            "claude-haiku-4.5",
-            "claude-sonnet-4.5",
-            "claude-opus-4.5",
-            "gemini-3-flash-preview",
-            "gemini-3-pro-preview",
-            "gemini-2.5-pro",
-            "gpt-5.1-codex-max",
-            "gpt-5.1-codex-mini",
-            "gpt-5.2-codex"
-        ],
+        "copilot": config_copy.get("copilot_models", []),
         "openrouter": [
-            "anthropic/claude-sonnet-4.5",
-            "anthropic/claude-haiku-4.5",
-            "anthropic/claude-opus-4.5",
+            "anthropic/claude-sonnet-4.6",
+            "anthropic/claude-haiku-4.6",
+            "anthropic/claude-opus-4.6",
             "openai/gpt-4.1",
             "openai/gpt-4o",
             "openai/o1-preview",
@@ -362,6 +350,11 @@ async def get_config_endpoint(request: Request):
         ],
         "custom": build_custom_provider_models()
     }
+
+    # Add dynamic providers' models
+    with providers_lock:
+        for provider in config.custom_providers:
+            available_models[provider["id"]] = provider.get("models", [])
 
     return JSONResponse(content={
         "config": config_copy,
@@ -386,9 +379,15 @@ async def update_config_endpoint(request: Request):
                     )
 
         with config_lock:
+            # Handle standard updates
             for key, value in updates.items():
-                if key in ["sonnet_provider", "haiku_provider", "opus_provider", "sonnet_model", "haiku_model", "opus_model"]:
+                if key in ["sonnet_provider", "haiku_provider", "opus_provider", "sonnet_model", "haiku_model", "opus_model", "copilot_models"]:
                     runtime_config[key] = value
+            
+            # Handle reactors updates
+            if "reactors" in updates:
+                runtime_config["reactors"] = updates["reactors"]
+                
             runtime_config["last_updated"] = datetime.now().isoformat()
 
         save_config()
@@ -496,6 +495,125 @@ async def delete_favorite_endpoint(request: Request):
     except Exception as e:
         logger.error(f"[Favorites] Failed to delete favorite: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+
+# ---------------------------------------------------------------------------
+# Custom Providers CRUD
+# ---------------------------------------------------------------------------
+
+async def get_providers_endpoint(request: Request):
+    """Get all custom providers."""
+    with providers_lock:
+        return JSONResponse(content={"providers": config.custom_providers})
+
+
+async def add_provider_endpoint(request: Request):
+    """Add a new custom provider."""
+    try:
+        body = await request.body()
+        data = json.loads(body) if body else {}
+
+        name = data.get('name', '').strip()
+        base_url = data.get('base_url', '').strip()
+        api_key = data.get('api_key', '').strip()
+        models = data.get('models', [])
+
+        if not name or not base_url:
+            return JSONResponse(content={"error": "Name and Base URL are required"}, status_code=400)
+
+        # Generate a simple slug/id from name if not provided
+        import re
+        p_id = data.get('id') or re.sub(r'[^a-z0-9]', '-', name.lower()).strip('-')
+        
+        if p_id == "custom":
+            return JSONResponse(
+                status_code=400,
+                content={"error": "The ID 'custom' is reserved for environment-level configuration. Please use a different name."}
+            )
+
+        new_provider = {
+            "id": p_id,
+            "name": name,
+            "base_url": base_url,
+            "api_key": api_key,
+            "models": models,
+            "created_at": datetime.now().isoformat()
+        }
+
+        with providers_lock:
+            # Check if ID already exists
+            if any(p['id'] == p_id for p in config.custom_providers):
+                return JSONResponse(content={"error": f"Provider ID '{p_id}' already exists"}, status_code=400)
+            
+            updated_providers = config.custom_providers + [new_provider]
+            save_custom_providers(updated_providers)
+
+        logger.info(f"[Providers] Added new custom provider: {name} ({p_id})")
+        return JSONResponse(content={"status": "success", "provider": new_provider})
+
+    except Exception as e:
+        logger.error(f"[Providers] Failed to add provider: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+async def update_provider_endpoint(request: Request):
+    """Update an existing custom provider."""
+    try:
+        p_id = request.path_params.get("id")
+        body = await request.body()
+        data = json.loads(body) if body else {}
+
+        with providers_lock:
+            for i, p in enumerate(config.custom_providers):
+                if p['id'] == p_id:
+                    # Update fields
+                    for key in ['name', 'base_url', 'api_key', 'models']:
+                        if key in data:
+                            p[key] = data[key]
+                    
+                    save_custom_providers(config.custom_providers)
+                    logger.info(f"[Providers] Updated custom provider: {p_id}")
+                    return JSONResponse(content={"status": "success", "provider": p})
+
+        return JSONResponse(content={"error": "Provider not found"}, status_code=404)
+
+    except Exception as e:
+        logger.error(f"[Providers] Failed to update provider: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+async def delete_provider_endpoint(request: Request):
+    """Delete a custom provider."""
+    try:
+        p_id = request.path_params.get("id")
+        
+        with providers_lock:
+            logger.info(f"[Providers] Deleting custom provider with ID: {p_id}")
+            initial_count = len(config.custom_providers)
+            updated_providers = [p for p in config.custom_providers if p['id'] != p_id]
+            
+            if len(updated_providers) < initial_count:
+                save_custom_providers(updated_providers)
+                logger.info(f"[Providers] Deleted custom provider: {p_id}")
+                return JSONResponse(content={"status": "success"})
+            
+        return JSONResponse(content={"error": "Provider not found"}, status_code=404)
+
+    except Exception as e:
+        logger.error(f"[Providers] Failed to delete provider: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+async def providers_page_endpoint(request: Request):
+    """Serve dedicated providers management page."""
+    providers_html_path = Path(__file__).parent.parent / "providers.html"
+    if providers_html_path.exists():
+        with open(providers_html_path, 'r', encoding='utf-8') as f:
+            html = f.read()
+        return HTMLResponse(content=html)
+    else:
+        return HTMLResponse(content="<html><body><h1>Providers page not found</h1></body></html>", status_code=404)
 
 
 # ---------------------------------------------------------------------------
@@ -634,3 +752,47 @@ async def antigravity_health_proxy(request: Request):
             return JSONResponse(content={"error": "Antigravity health unavailable"}, status_code=response.status_code)
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=503)
+
+
+# ---------------------------------------------------------------------------
+# Copilot Auth Endpoints
+# ---------------------------------------------------------------------------
+
+async def copilot_login_start(request: Request):
+    """Initiate GitHub device code flow."""
+    try:
+        data = await copilot_manager.get_device_code()
+        return JSONResponse(content=data)
+    except Exception as e:
+        logger.error(f"[Copilot] Failed to start login: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+async def copilot_login_poll(request: Request):
+    """Poll for GitHub access token."""
+    try:
+        device_code = request.query_params.get("device_code")
+        if not device_code:
+            return JSONResponse(content={"error": "device_code is required"}, status_code=400)
+            
+        result = await copilot_manager.poll_for_token(device_code)
+        return JSONResponse(content=result)
+    except Exception as e:
+        logger.error(f"[Copilot] Failed to poll for token: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+async def copilot_status(request: Request):
+    """Check Copilot authentication status."""
+    github_token = config.runtime_config.get("copilot_github_token")
+    has_copilot_token = bool(config.runtime_config.get("copilot_access_token"))
+    expires_at = config.runtime_config.get("copilot_expires_at", 0)
+    
+    logger.info(f"[Copilot] Status request. Authenticated: {bool(github_token)}")
+    
+    return JSONResponse(content={
+        "authenticated": bool(github_token),
+        "has_copilot_token": has_copilot_token,
+        "expires_at": expires_at,
+        "enabled": config.ENABLE_COPILOT
+    })

@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claude Proxy // Providers</title>
+    <style>
+        :root {
+            --bg: #050505;
+            --surface: #111;
+            --border: #333;
+            --text: #e0e0e0;
+            --accent: #ff9e0b;
+            --font: 'SF Mono', 'Segoe UI Mono', 'Roboto Mono', monospace;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--font);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        .header {
+            padding: 20px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+            background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
+        }
+
+        .brand { font-size: 18px; font-weight: 700; color: #fff; letter-spacing: 2px; }
+        .nav a { color: #666; text-decoration: none; font-size: 12px; margin-left: 20px; transition: 0.2s; text-transform: uppercase; }
+        .nav a:hover { color: #fff; }
+
+        .container {
+            max-width: 1000px;
+            margin: 40px auto;
+            padding: 0 20px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+
+        h2 { margin-top: 0; font-size: 20px; color: var(--accent); letter-spacing: 1px; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th { text-align: left; color: #555; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+        td { padding: 15px 0; border-bottom: 1px solid #1a1a1a; font-size: 13px; }
+
+        .btn {
+            background: #222;
+            color: #fff;
+            border: 1px solid #444;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-family: var(--font);
+            font-size: 11px;
+            text-transform: uppercase;
+            border-radius: 4px;
+            transition: 0.2s;
+        }
+        .btn:hover { background: #333; border-color: #666; }
+        .btn-accent { color: var(--accent); border-color: var(--accent); background: rgba(255,158,11,0.05); }
+        .btn-accent:hover { background: var(--accent); color: #000; }
+        .btn-danger { color: #ff4444; border-color: #442222; }
+        .btn-danger:hover { background: #ff4444; color: #fff; }
+
+        .model-tag {
+            display: inline-block;
+            background: #1a1a1a;
+            color: #888;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            margin-right: 4px;
+            margin-bottom: 4px;
+            border: 1px solid #222;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            backdrop-filter: blur(5px);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 30px;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 500px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; font-size: 11px; color: #555; text-transform: uppercase; margin-bottom: 8px; }
+        .form-group input, .form-group textarea {
+            width: 100%;
+            background: #0a0a0a;
+            border: 1px solid var(--border);
+            color: #fff;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: var(--font);
+            box-sizing: border-box;
+        }
+        .form-group input:focus { border-color: var(--accent); outline: none; }
+        .form-group small { color: #444; font-size: 9px; margin-top: 5px; display: block; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div class="brand">CLAUDE_PROXY // PROVIDERS</div>
+        <div class="nav">
+            <a href="/dashboard">Dashboard</a>
+            <a href="/logs.html">Logs</a>
+            <a href="/usage">Usage</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <p style="color: #666; font-size: 13px;">Manage your custom LLM providers and models. Models added here will appear in the reactor selection rings.</p>
+            <button class="btn btn-accent" onclick="openModal()">+ Add Provider</button>
+        </div>
+
+        <!-- Copilot Auth Card -->
+        <div class="card" id="copilot-auth-card">
+            <h2>GitHub Copilot Authentication</h2>
+            <div id="copilot-status-area" style="margin-top: 15px;">
+                <p style="font-size: 13px; color: #888;">Checking status...</p>
+            </div>
+            <div id="copilot-login-area" style="display: none; margin-top: 20px; padding: 20px; background: #0a0a0a; border: 1px dashed #333; border-radius: 8px; text-align: center;">
+                <p style="font-size: 14px; margin-bottom: 20px;">To authorize this proxy, enter the code below at <a href="https://github.com/login/device" target="_blank" style="color: var(--accent);">github.com/login/device</a></p>
+                <div id="copilot-device-code" style="font-size: 32px; font-weight: 800; letter-spacing: 5px; color: #fff; margin-bottom: 20px; font-family: monospace;">--------</div>
+                <p style="font-size: 11px; color: #555;">The proxy will automatically detect when you have authorized it.</p>
+            </div>
+            
+            <!-- Copilot Models Editing -->
+            <div id="copilot-models-area" style="margin-top: 20px; border-top: 1px solid #222; padding-top: 15px;">
+                <label style="display: block; font-size: 11px; color: #555; text-transform: uppercase; margin-bottom: 8px;">Enabled Models (Comma separated)</label>
+                <div style="display: flex; gap: 10px;">
+                    <textarea id="copilot-models-list" rows="2" style="flex: 1; background: #0a0a0a; border: 1px solid var(--border); color: #fff; padding: 10px; border-radius: 4px; font-family: var(--font); font-size: 11px;"></textarea>
+                    <button class="btn" style="height: fit-content;" onclick="saveCopilotModels()">Update List</button>
+                </div>
+                <small style="color: #444; font-size: 9px; margin-top: 5px; display: block;">Add any new GitHub models here to make them available in the dashboard.</small>
+            </div>
+        </div>
+
+        <div class="card">
+            <table id="providers-table">
+                <thead>
+                    <tr>
+                        <th>Provider</th>
+                        <th>Base URL</th>
+                        <th>Models</th>
+                        <th style="width: 150px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="providers-list">
+                    <!-- Loaded dynamically -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Add/Edit Modal -->
+    <div id="provider-modal" class="modal">
+        <div class="modal-content">
+            <h2 id="modal-title">Add Provider</h2>
+            <input type="hidden" id="edit-id">
+            
+            <div class="form-group">
+                <label>Name</label>
+                <input type="text" id="p-name" placeholder="e.g. My Custom LLM">
+            </div>
+            
+            <div class="form-group">
+                <label>Base URL</label>
+                <input type="text" id="p-url" placeholder="https://api.example.com">
+                <small>The /v1/messages will be appended automatically if not included.</small>
+            </div>
+            
+            <div class="form-group">
+                <label>API Key</label>
+                <input type="password" id="p-key" placeholder="sk-...">
+            </div>
+            
+            <div class="form-group">
+                <label>Models (Comma separated)</label>
+                <textarea id="p-models" rows="3" placeholder="gpt-4o, llama-3, deepseek-chat"></textarea>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-top: 30px;">
+                <button class="btn btn-accent" style="flex: 1" onclick="saveProvider()">Save Provider</button>
+                <button class="btn" style="flex: 1" onclick="closeModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let providers = [];
+
+        function getAuthUrl(url) {
+            const params = new URLSearchParams(window.location.search);
+            const key = params.get('key');
+            if (key) {
+                const separator = url.includes('?') ? '&' : '?';
+                return `${url}${separator}key=${key}`;
+            }
+            return url;
+        }
+
+        async function loadProviders() {
+            try {
+                const r = await fetch(getAuthUrl('/api/providers'));
+                const d = await r.json();
+                providers = d.providers;
+                renderProviders();
+            } catch (e) {
+                console.error("Failed to load providers", e);
+            }
+        }
+
+        function renderProviders() {
+            const list = document.getElementById('providers-list');
+            if (providers.length === 0) {
+                list.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #444; padding: 40px;">No custom providers configured.</td></tr>';
+                return;
+            }
+
+            list.innerHTML = providers.map(p => `
+                <tr>
+                    <td style="font-weight: 700;">${p.name}</td>
+                    <td style="color: #666; font-size: 11px;">${p.base_url}</td>
+                    <td>
+                        ${(p.models || []).map(m => `<span class="model-tag">${m}</span>`).join('')}
+                    </td>
+                    <td>
+                        <button class="btn" onclick="editProvider('${p.id}')">Edit</button>
+                        <button class="btn btn-danger" onclick="deleteProvider('${p.id}')">Delete</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function editProvider(id) {
+            openModal(id);
+        }
+
+        function openModal(editId = null) {
+            const modal = document.getElementById('provider-modal');
+            const title = document.getElementById('modal-title');
+            document.getElementById('edit-id').value = editId || '';
+            
+            if (editId) {
+                const p = providers.find(x => x.id === editId);
+                document.getElementById('p-name').value = p.name;
+                document.getElementById('p-url').value = p.base_url;
+                document.getElementById('p-key').value = p.api_key;
+                document.getElementById('p-models').value = (p.models || []).join(', ');
+                title.innerText = "Edit Provider";
+            } else {
+                document.getElementById('p-name').value = '';
+                document.getElementById('p-url').value = '';
+                document.getElementById('p-key').value = '';
+                document.getElementById('p-models').value = '';
+                title.innerText = "Add Provider";
+            }
+            
+            modal.style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('provider-modal').style.display = 'none';
+        }
+
+        async function saveProvider() {
+            const editId = document.getElementById('edit-id').value;
+            const data = {
+                name: document.getElementById('p-name').value,
+                base_url: document.getElementById('p-url').value,
+                api_key: document.getElementById('p-key').value,
+                models: document.getElementById('p-models').value.split(',').map(m => m.trim()).filter(m => m)
+            };
+
+            try {
+                const method = editId ? 'PUT' : 'POST';
+                const url = editId ? `/api/providers/${editId}` : '/api/providers';
+                
+                const r = await fetch(getAuthUrl(url), {
+                    method: method,
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+                
+                if (r.ok) {
+                    closeModal();
+                    loadProviders();
+                } else {
+                    const err = await r.json();
+                    alert("Error: " + err.error);
+                }
+            } catch (e) {
+                alert("Failed to save provider");
+            }
+        }
+
+        async function deleteProvider(id) {
+            if (!confirm("Are you sure you want to delete this provider?")) return;
+            
+            try {
+                const r = await fetch(getAuthUrl(`/api/providers/${id}`), { method: 'DELETE' });
+                if (r.ok) {
+                    loadProviders();
+                } else {
+                    const d = await r.json();
+                    alert("Error: " + (d.error || "Unknown error"));
+                }
+            } catch (e) {
+                alert("Failed to delete provider: " + e);
+            }
+        }
+
+        // --- Copilot Auth Logic ---
+        let pollInterval = null;
+
+        async function checkCopilotStatus() {
+            const statusArea = document.getElementById('copilot-status-area');
+            try {
+                console.log("Checking Copilot status...");
+                const r = await fetch(getAuthUrl('/api/copilot/status'));
+                if (!r.ok) throw new Error("Status API returned " + r.status);
+                const d = await r.json();
+                
+                if (d.authenticated) {
+                    statusArea.innerHTML = `
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <span style="color: #10b981; font-weight: 700;">✓ AUTHENTICATED</span>
+                                <p style="font-size: 11px; color: #555; margin-top: 5px;">Linked to your GitHub account. Copilot models are ready.</p>
+                            </div>
+                            <button class="btn btn-danger" onclick="logoutCopilot()">Logout</button>
+                        </div>
+                    `;
+                    document.getElementById('copilot-login-area').style.display = 'none';
+                    if (pollInterval) clearInterval(pollInterval);
+                } else {
+                    statusArea.innerHTML = `
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <span style="color: #666; font-weight: 700;">NOT AUTHENTICATED</span>
+                                <p style="font-size: 11px; color: #555; margin-top: 5px;">Login to GitHub to use official Copilot models.</p>
+                            </div>
+                            <button class="btn btn-accent" id="btn-copilot-login" onclick="startCopilotLogin()">Login with GitHub</button>
+                        </div>
+                    `;
+                }
+
+                // Also fetch full config to populate models list
+                const configR = await fetch(getAuthUrl('/config'));
+                if (configR.ok) {
+                    const configD = await configR.json();
+                    const models = configD.config.copilot_models || [];
+                    document.getElementById('copilot-models-list').value = models.join(', ');
+                }
+
+            } catch (e) {
+                console.error("Failed to check Copilot status", e);
+                statusArea.innerHTML = `<p style="color: #ff4444; font-size: 11px;">Error checking status: ${e.message}. <a href="#" onclick="checkCopilotStatus()" style="color: var(--accent);">Retry</a></p>`;
+            }
+        }
+
+        async function saveCopilotModels() {
+            const listStr = document.getElementById('copilot-models-list').value;
+            const models = listStr.split(',').map(m => m.trim()).filter(m => m);
+            
+            try {
+                const r = await fetch(getAuthUrl('/config'), {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        copilot_models: models
+                    })
+                });
+                if (r.ok) {
+                    alert("Copilot models updated successfully!");
+                } else {
+                    const d = await r.json();
+                    alert("Error updating models: " + (d.error || "Unknown error"));
+                }
+            } catch (e) {
+                alert("Failed to save models: " + e);
+            }
+        }
+
+        async function startCopilotLogin() {
+            const btn = document.getElementById('btn-copilot-login');
+            btn.disabled = true;
+            btn.innerText = "Starting...";
+            
+            try {
+                const r = await fetch(getAuthUrl('/api/copilot/login/start'));
+                const d = await r.json();
+                
+                document.getElementById('copilot-device-code').innerText = d.user_code;
+                document.getElementById('copilot-login-area').style.display = 'block';
+                
+                // Start polling
+                if (pollInterval) clearInterval(pollInterval);
+                pollInterval = setInterval(() => pollCopilotToken(d.device_code), (d.interval || 5) * 1000);
+                
+                btn.innerText = "Polling...";
+            } catch (e) {
+                alert("Failed to initiate login: " + e);
+                btn.disabled = false;
+                btn.innerText = "Login with GitHub";
+            }
+        }
+
+        async function pollCopilotToken(deviceCode) {
+            try {
+                const r = await fetch(getAuthUrl(`/api/copilot/login/poll?device_code=${deviceCode}`));
+                const d = await r.json();
+                
+                if (d.status === 'success') {
+                    clearInterval(pollInterval);
+                    checkCopilotStatus();
+                } else if (d.status === 'expired' || d.status === 'denied' || d.status === 'error') {
+                    clearInterval(pollInterval);
+                    alert("Login failed or expired. Please try again.");
+                    checkCopilotStatus();
+                    document.getElementById('copilot-login-area').style.display = 'none';
+                }
+                // 'pending' and 'slow_down' continue polling
+            } catch (e) {
+                console.error("Poll error", e);
+            }
+        }
+
+        async function logoutCopilot() {
+            if (!confirm("Are you sure you want to logout from GitHub Copilot?")) return;
+            // We'll use the config update endpoint to clear the token
+            try {
+                const r = await fetch(getAuthUrl('/config'), {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        copilot_github_token: null,
+                        copilot_access_token: null,
+                        copilot_expires_at: 0
+                    })
+                });
+                if (r.ok) checkCopilotStatus();
+            } catch (e) {
+                alert("Failed to logout");
+            }
+        }
+
+        // Initialize
+        loadProviders();
+        checkCopilotStatus();
+    </script>
+</body>
+</html>

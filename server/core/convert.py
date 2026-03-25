@@ -3,6 +3,8 @@ Anthropic ↔ OpenAI format conversion utilities.
 """
 
 import json
+import uuid
+from typing import AsyncGenerator, Optional, Dict, Any
 
 from core.config import logger
 
@@ -182,6 +184,57 @@ def convert_openai_to_anthropic(openai_response: dict) -> dict:
     return anthropic_response
 
 
-def convert_openai_stream_to_anthropic(chunk: bytes) -> bytes:
-    """Convert OpenAI streaming format to Anthropic streaming format."""
-    return chunk
+async def convert_openai_stream_to_anthropic_async(response_iterator, model="unknown"):
+    """
+    Async generator that converts OpenAI SSE stream to Anthropic SSE stream.
+    Transforms 'delta' chunks into 'content_block_delta' events.
+    """
+    message_id = f"msg_{uuid.uuid4().hex}"
+    
+    # 1. Send message_start
+    yield f"event: message_start\ndata: {json.dumps({'type': 'message_start', 'message': {'id': message_id, 'type': 'message', 'role': 'assistant', 'model': model, 'usage': {'input_tokens': 0, 'output_tokens': 0}, 'content': [], 'stop_reason': None, 'stop_sequence': None}})}\n\n".encode('utf-8')
+    
+    # 2. Send content_block_start
+    yield f"event: content_block_start\ndata: {json.dumps({'type': 'content_block_start', 'index': 0, 'content_block': {'type': 'text', 'text': ''}})}\n\n".encode('utf-8')
+
+    async for chunk in response_iterator:
+        if not chunk:
+            continue
+            
+        lines = chunk.decode('utf-8').split('\n')
+        for line in lines:
+            if line.startswith('data: '):
+                data_str = line[6:].strip()
+                if data_str == '[DONE]':
+                    continue
+                
+                try:
+                    data = json.loads(data_str)
+                    choices = data.get("choices", [])
+                    if not choices:
+                        continue
+                        
+                    delta = choices[0].get("delta", {})
+                    content = delta.get("content", "")
+                    
+                    if content:
+                        # 3. Send content_block_delta
+                        yield f"event: content_block_delta\ndata: {json.dumps({'type': 'content_block_delta', 'index': 0, 'delta': {'type': 'text_delta', 'text': content}})}\n\n".encode('utf-8')
+                        
+                    finish_reason = choices[0].get("finish_reason")
+                    if finish_reason:
+                        # 4. Send content_block_stop
+                        yield f"event: content_block_stop\ndata: {json.dumps({'type': 'content_block_stop', 'index': 0})}\n\n".encode('utf-8')
+                        
+                        # 5. Send message_delta (stop reason)
+                        stop_reason_map = {"stop": "end_turn", "length": "max_tokens", "tool_calls": "tool_use"}
+                        yield f"event: message_delta\ndata: {json.dumps({'type': 'message_delta', 'delta': {'stop_reason': stop_reason_map.get(finish_reason, 'end_turn'), 'stop_sequence': None}, 'usage': {'output_tokens': 0}})}\n\n".encode('utf-8')
+                except Exception as e:
+                    logger.debug(f"[Convert] Failed to parse SSE chunk: {e}")
+                    continue
+
+    # 6. Send message_stop
+    yield f"event: message_stop\ndata: {json.dumps({'type': 'message_stop'})}\n\n".encode('utf-8')
+
+
+

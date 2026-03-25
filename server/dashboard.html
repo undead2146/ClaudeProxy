@@ -3,40 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Claude Proxy // Reactor V3</title>
+    <title>Claude Proxy Dashboard // Dynamic Reactors</title>
     <style>
         :root {
             --bg: #050505;
-            --text: #e0e0e0;
-            --font: 'SF Mono', 'Segoe UI Mono', 'Roboto Mono', monospace;
-
-            --c-sonnet: #ff9e0b;
-            --c-haiku: #10b981;
-            --c-opus: #8b5cf6;
+            --panel: #111;
+            --accent: #555;
+            --theme: #ffaa00;
+            --font: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
 
+        * { box-sizing: border-box; }
         body {
-            margin: 0;
-            background: var(--bg);
-            color: var(--text);
-            font-family: var(--font);
-            height: 100vh;
-            width: 100vw;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
+            margin: 0; background: var(--bg); color: #fff; font-family: var(--font); overflow: hidden;
+            display: flex; flex-direction: column; height: 100vh;
         }
 
-        /* HEADER */
+        /* HEADER HUD */
         .hud-header {
-            position: absolute; top: 0; left: 0; width: 100%;
-            padding: 20px 40px; box-sizing: border-box;
-            display: flex; justify-content: space-between; align-items: center;
-            z-index: 100; pointer-events: none;
-            background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
+            display: flex; justify-content: space-between; align-items: center; padding: 20px 40px;
+            border-bottom: 1px solid #222; background: rgba(0,0,0,0.8); backdrop-filter: blur(10px); z-index: 100;
         }
-        .brand { font-size: 20px; font-weight: 700; color: #fff; letter-spacing: 2px; display: flex; align-items: center; gap: 10px; }
-        .links a { pointer-events: auto; color: #666; text-decoration: none; font-size: 12px; margin-left: 20px; transition: 0.2s; text-transform: uppercase; }
+        .brand { font-weight: 900; letter-spacing: 4px; font-size: 14px; color: #666; display: flex; align-items: center; gap: 15px; }
+        .links { display: flex; gap: 30px; }
+        .links a { color: #555; text-decoration: none; font-size: 11px; text-transform: uppercase; letter-spacing: 2px; font-weight: 700; transition: 0.3s; }
         .links a:hover { color: #fff; }
 
         .pulse-dot { width: 8px; height: 8px; background: #333; border-radius: 50%; box-shadow: 0 0 0 1px #333; transition: 0.3s; }
@@ -44,774 +34,318 @@
 
         /* MAIN STAGE */
         .stage {
-            flex: 1;
-            display: flex;
-            justify-content: space-evenly;
-            align-items: center;
-            width: 100%;
-            perspective: 1000px;
+            flex: 1; display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
+            gap: 20px; width: 100%; padding: 40px; overflow-y: auto;
         }
 
         /* REACTOR COMPONENTS */
         .reactor {
-            position: relative;
-            width: 40vw; height: 40vw;
-            max-width: 600px; max-height: 600px;
-            min-width: 400px; min-height: 400px;
-            display: flex; justify-content: center; align-items: center;
+            position: relative; width: 400px; height: 400px;
+            display: flex; justify-content: center; align-items: center; transition: transform 0.3s ease;
         }
+        .reactor:hover { transform: scale(1.02); }
+        .reactor svg { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 0 20px rgba(0,0,0,0.5)); }
 
-        .reactor svg {
-            width: 100%; height: 100%;
-            overflow: visible;
-            filter: drop-shadow(0 0 20px rgba(0,0,0,0.5));
+        .btn-reactor-action {
+            position: absolute; width: 26px; height: 26px; border-radius: 50%; display: flex;
+            justify-content: center; align-items: center; cursor: pointer; font-size: 14px; font-weight: bold;
+            opacity: 0; transition: all 0.2s; z-index: 10; border: 1px solid rgba(255,255,255,0.1);
         }
+        .reactor:hover .btn-reactor-action { opacity: 1; }
+        
+        .btn-delete { top: 20px; right: 20px; background: rgba(255,0,0,0.1); color: #ff4444; }
+        .btn-delete:hover { background: #ff4444; color: #fff; transform: scale(1.1); }
+        
+        .btn-edit { top: 20px; right: 55px; background: rgba(255,255,255,0.05); color: #fff; }
+        .btn-edit:hover { background: #fff; color: #000; transform: scale(1.1); }
 
         /* SVG PATH STYLES */
-        path { transition: all 0.2s cubic-bezier(0.1, 0.7, 0.1, 1); cursor: pointer; vector-effect: non-scaling-stroke; }
+        .layer-core { fill: #000; stroke: var(--theme); stroke-width: 2px; filter: url(#glow); transition: 0.5s; }
+        .layer-prov { fill: #111; stroke: #222; stroke-width: 1px; transition: all 0.3s; cursor: pointer; }
+        .layer-prov:hover { fill: #1a1a1a; stroke: var(--theme); }
+        .layer-prov.active { fill: var(--theme); stroke: #fff; }
+        .layer-prov.selected-dormant { fill: #222; stroke: var(--theme); opacity: 0.6; }
+        .layer-prov.dim { opacity: 0.1; }
 
-        /* Layer 1: Core */
-        .layer-core { fill: #111; stroke: #333; stroke-width: 1px; }
-        .layer-core:hover { fill: #1a1a1a; }
-
-        /* Layer 2: Providers */
-        .layer-prov {
-            fill: #0a0a0a;
-            stroke: #222;
-            stroke-width: 1px;
-            transition: all 0.3s ease;
-        }
-
-        /* State classes applied directly to the path */
-        .layer-prov.hover { fill: #222; }
-        .layer-prov.active { fill: var(--theme); stroke: var(--theme); }
-        .layer-prov.dim { opacity: 0.2; fill: #000; }
-
-        /* When active but secondary (hovering another), keep it visible but distinct */
-        .layer-prov.selected-dormant { fill: #111; stroke: var(--theme); stroke-width: 2px; stroke-dasharray: 4 2; opacity: 1; }
-
-        /* Icons */
-        .prov-icon {
-            transition: all 0.3s ease;
-            pointer-events: none;
-            opacity: 0.8;
-            fill: #666;
-        }
+        .prov-icon { fill: #555; transition: 0.3s; pointer-events: none; }
         .prov-icon.active { fill: #000; }
         .prov-icon.hover { fill: #fff; }
         .prov-icon.dim { opacity: 0.1; }
 
-        /* Layer 3: Models */
-        .layer-model {
-            fill: #050505;
-            stroke: #222;
-            stroke-width: 1px;
-            opacity: 0;
-            transform-origin: center;
-            pointer-events: none;
-            transition: all 0.3s cubic-bezier(0.1, 0.7, 0.1, 1);
-        }
+        .layer-model { fill: #050505; stroke: #222; opacity: 0; pointer-events: none; transition: all 0.3s; }
         .layer-model.visible { opacity: 1; pointer-events: auto; }
         .layer-model:hover { fill: var(--theme); opacity: 0.8; }
-        .layer-model.selected { fill: var(--theme); stroke: #fff; stroke-width: 1px; opacity: 1; }
+        .layer-model.selected { fill: var(--theme); stroke: #fff; opacity: 1; }
 
-        /* TEXT / LABELS */
         text { font-family: var(--font); pointer-events: none; text-anchor: middle; dominant-baseline: middle; fill: #aaa; font-size: 11px; font-weight: 600; }
-
         .text-core-label { font-size: 18px; font-weight: 800; fill: #fff; letter-spacing: 1px; }
         .text-core-sub { font-size: 11px; fill: var(--theme); letter-spacing: 1px; text-transform: uppercase; }
 
-        .text-model { fill: #888; font-size: 11px; transition: all 0.2s; font-weight: 500; }
-        .layer-model:hover + .text-model { fill: #fff; font-weight: 700; font-size: 12px; }
-        .layer-model.selected + .text-model { fill: #000 !important; font-weight: 800; font-size: 12px; }
-
-        .btn-config {
-            margin-left: 10px;
-            background: #444;
-            border: none;
-            color: #fff;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 12px;
-            text-transform: uppercase;
-        }
-        .btn-config:hover { background: #555; }
-
-        /* Config Section */
-        #config-section {
-            font-family: var(--font);
-            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
-        }
-        #config-section input {
-            transition: border-color 0.3s;
-        }
-        #config-section input:focus {
-            outline: none;
-            border-color: #555;
-        }
-        #config-section button {
-            transition: background-color 0.3s;
-        }
-        #config-section button:hover {
-            background: #555;
-        }
-
-        /* Action Bar */
-        .action-bar {
-            position: absolute; bottom: 40px; width: 100%; text-align: center; pointer-events: none;
-        }
         .btn-apply {
-            background: #000; color: #444; border: 1px solid #333;
-            padding: 12px 30px; font-family: var(--font); font-size: 12px; letter-spacing: 2px;
-            pointer-events: auto; cursor: pointer; transition: 0.3s;
+            background: transparent; border: 1px solid #333; color: #333; padding: 12px 40px;
+            font-size: 12px; font-weight: 900; letter-spacing: 3px; border-radius: 2px;
+            cursor: not-allowed; transition: all 0.4s;
         }
-        .btn-apply.ready { border-color: var(--c-haiku); color: var(--c-haiku); background: rgba(0,255,0,0.05); }
-        .btn-apply.ready:hover { background: var(--c-haiku); color: #000; box-shadow: 0 0 20px rgba(0,255,0,0.4); }
+        .btn-apply.ready { border-color: #fff; color: #fff; cursor: pointer; }
+        .btn-apply.ready:hover { background: #fff; color: #000; }
 
-        /* tooltip */
         .tooltip {
-            position: absolute; pointer-events: none; padding: 4px 8px; background: #222; border: 1px solid #444; border-radius: 4px; font-size: 10px; color: #fff; opacity: 0; transition: opacity 0.2s; z-index: 500;
+            position: fixed; background: #fff; color: #000; padding: 4px 10px; font-size: 10px;
+            font-weight: 900; text-transform: uppercase; pointer-events: none; z-index: 1000; display: none;
         }
-        .tooltip.visible { opacity: 1; }
+        .tooltip.visible { display: block; }
 
+        #config-section {
+            display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            min-width: 450px; z-index: 500; background: #111; border: 1px solid #333; padding: 30px; border-radius: 12px;
+        }
+        #config-section input { width: 100%; background: #000; border: 1px solid #333; color: #fff; padding: 10px; border-radius: 4px; }
+        .info-box { font-size: 10px; color: #666; background: rgba(255,255,255,0.02); padding: 10px; border-radius: 4px; border-left: 2px solid var(--theme); margin-top: 5px; }
     </style>
 </head>
 <body>
-
-    <!-- SVG ICONS DEFS -->
-    <svg style="display:none">
+    <svg style="display:none;">
         <defs>
-            <symbol id="icon-antigravity" viewBox="0 0 24 24">
-                <!-- Rocket / Space theme -->
-                <path d="M13.13 22.19L11.5 18.36C12.55 17.5 13.53 16.53 14.36 15.5L18.19 17.13C17.06 19.34 15.34 21.06 13.13 22.19M5.81 17.13L9.64 15.5C10.47 16.53 11.45 17.5 12.5 18.36L10.87 22.19C8.66 21.06 6.94 19.34 5.81 17.13M12 2C16.5 2 20.36 4.82 21.93 8.76L18 13.56L14.73 11.08C14.89 10.74 15 10.38 15 10C15 8.34 13.66 7 12 7S9 8.34 9 10C9 10.38 9.11 10.74 9.27 11.08L6 13.56L2.07 8.76C3.64 4.82 7.5 2 12 2Z" />
-            </symbol>
-            <symbol id="icon-anthropic" viewBox="0 0 16 16">
-                <!-- Bootstrap Anthropic Icon (Clean Path) -->
-                <path fill-rule="evenodd" d="M11.666 8.5H1c-.55 0-1 .45-1 1s.45 1 1 1h10.666c.55 0 1-.45 1-1s-.45-1-1-1zm0-3.5H1c-.55 0-1 .45-1 1s.45 1 1 1h10.666c.55 0 1-.45 1-1s-.45-1-1-1zM1 15c-.55 0-1-.45-1-1s.45-1 1-1h6.666c.55 0 1 .45 1 1s-.45 1-1 1H1zM11 1.5H1c-.55 0-1 .45-1 1s.45 1 1 1h10c.55 0 1-.45 1-1s-.45-1-1-1z"/>
-            </symbol>
-            <symbol id="icon-copilot" viewBox="0 0 24 24">
-                <!-- Modern GitHub Copilot Face -->
-                <path d="M12 3c-4.4 0-8 3.6-8 8s3.6 8 8 8 8-3.6 8-8-3.6-8-8-8zm0 14c-3.3 0-6-2.7-6-6s2.7-6 6-6 6 2.7 6 6-2.7 6-6 6z"/>
-                <circle cx="9" cy="10" r="1.5"/>
-                <circle cx="15" cy="10" r="1.5"/>
-                <path d="M12 14c-1.5 0-2.8-.8-3.5-2h-1.1c.8 1.8 2.6 3 4.6 3s3.8-1.2 4.6-3h-1.1c-.7 1.2-2 2-3.5 2z"/>
-            </symbol>
-            <symbol id="icon-zai" viewBox="0 0 24 24">
-                <!-- Bold Z -->
-                <path d="M4 4h16v4h-8l8 8v4H4v-4h8l-8-8z"/>
-            </symbol>
-            <symbol id="icon-openrouter" viewBox="0 0 24 24">
-                 <!-- OpenRouter (Circuit/Network) - Refined -->
-                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
-            </symbol>
-            <symbol id="icon-custom" viewBox="0 0 24 24">
-                <!-- Gear -->
-                <path d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,13L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.67 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z" />
-            </symbol>
+            <symbol id="icon-antigravity" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></symbol>
+            <symbol id="icon-anthropic" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/></symbol>
+            <symbol id="icon-copilot" viewBox="0 0 24 24"><path d="M12 2C6.47 2 2 6.47 2 12c0 4.42 2.87 8.17 6.84 9.49.5.09.66-.22.66-.48 0-.24-.01-.88-.01-1.72-2.78.6-3.37-1.34-3.37-1.34-.45-1.15-1.11-1.46-1.11-1.46-.91-.62.07-.61.07-.61 1.01.07 1.54 1.04 1.54 1.04.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02.8-.22 1.65-.33 2.5-.33.85 0 1.7.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85 0 1.34-.01 2.42-.01 2.75 0 .27.15.58.67.48C19.14 20.16 22 16.42 22 12c0-5.53-4.47-10-10-10z"/></symbol>
+            <symbol id="icon-zai" viewBox="0 0 24 24"><path d="M4 4h16v4h-8l8 8v4H4v-4h8l-8-8z"/></symbol>
+            <symbol id="icon-openrouter" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/></symbol>
+            <symbol id="icon-custom" viewBox="0 0 24 24"><path d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,13L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.67 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z"/></symbol>
         </defs>
     </svg>
 
     <div class="hud-header">
-        <div class="brand">
-            <div class="pulse-dot" id="sys-status"></div>
-            CLAUDE_PROXY // V3
-        </div>
-        <div class="links">
-            <a href="/logs.html">Logs</a>
-            <a href="/usage">Token Usage</a>
-        </div>
+        <div class="brand"><div class="pulse-dot" id="sys-status"></div>CLAUDE_PROXY // DYNAMIC_ENGINE</div>
+        <div class="links" id="nav-links"><a href="/providers.html">Providers</a><a href="/logs.html">Logs</a><a href="/usage">Usage</a></div>
     </div>
 
-    <div class="stage">
-        <div id="mount-sonnet" class="reactor" data-tier="sonnet" style="--theme: var(--c-sonnet)"></div>
-        <div id="mount-haiku" class="reactor" data-tier="haiku" style="--theme: var(--c-haiku)"></div>
-        <div id="mount-opus" class="reactor" data-tier="opus" style="--theme: var(--c-opus)"></div>
-    </div>
+    <div class="stage" id="reactor-stage"></div>
 
     <div class="action-bar">
         <button id="btn-apply" class="btn-apply" onclick="applyChanges()">INITIALIZE SYSTEM</button>
-        <button id="btn-config" class="btn-config" onclick="toggleConfig()" style="display: none;">CONFIG</button>
+        <button id="btn-config" class="btn-config" style="margin-left: 20px;" onclick="openConfig()">ADD_REACTOR</button>
     </div>
 
     <div id="tooltip" class="tooltip"></div>
 
-    <!-- Hidden Configuration Section -->
-    <div id="config-section" style="display: none; position: fixed; bottom: 20px; right: 20px; background: #111; border: 1px solid #333; padding: 20px; border-radius: 10px; max-width: 400px; z-index: 200;">
-        <h3 style="margin: 0 0 15px 0; color: #888;">Custom Provider Configuration</h3>
-        <div style="margin-bottom: 10px;">
-            <label style="display: block; margin-bottom: 5px; font-size: 12px; color: #666;">API Key</label>
-            <input type="text" id="custom-api-key" style="width: 100%; background: #222; border: 1px solid #444; color: #fff; padding: 8px; border-radius: 4px;" />
-        </div>
-        <div style="margin-bottom: 10px;">
-            <label style="display: block; margin-bottom: 5px; font-size: 12px; color: #666;">API URL</label>
-            <input type="text" id="custom-base-url" style="width: 100%; background: #222; border: 1px solid #444; color: #fff; padding: 8px; border-radius: 4px;" />
-        </div>
-        <div style="margin-bottom: 10px;">
-            <label style="display: block; margin-bottom: 5px; font-size: 12px; color: #666;">Sonnet Model</label>
-            <input type="text" id="custom-sonnet-model" style="width: 100%; background: #222; border: 1px solid #444; color: #fff; padding: 8px; border-radius: 4px;" value="claude-sonnet-4.5" />
-        </div>
-        <div style="margin-bottom: 10px;">
-            <label style="display: block; margin-bottom: 5px; font-size: 12px; color: #666;">Haiku Model</label>
-            <input type="text" id="custom-haiku-model" style="width: 100%; background: #222; border: 1px solid #444; color: #fff; padding: 8px; border-radius: 4px;" value="claude-haiku-4.5" />
+    <div id="config-section">
+        <h3 id="modal-title">NEW_REACTOR_UNIT</h3>
+        <input type="hidden" id="edit-id" />
+        <div style="margin-bottom: 15px;">
+            <label style="display: block; margin-bottom: 5px; font-size: 11px; color: #888;">UNIT IDENTIFIER</label>
+            <input type="text" id="new-reactor-id" placeholder="e.g. fast-unit" />
         </div>
         <div style="margin-bottom: 15px;">
-            <label style="display: block; margin-bottom: 5px; font-size: 12px; color: #666;">Opus Model</label>
-            <input type="text" id="custom-opus-model" style="width: 100%; background: #222; border: 1px solid #444; color: #fff; padding: 8px; border-radius: 4px;" value="claude-opus-4.5" />
+            <label style="display: block; margin-bottom: 5px; font-size: 11px; color: #888;">DISPLAY LABEL</label>
+            <input type="text" id="new-reactor-label" placeholder="e.g. FAST ENGINE" />
         </div>
-        <button onclick="saveCustomConfig()" style="background: #444; border: none; color: #fff; padding: 8px 16px; border-radius: 4px; cursor: pointer;">Save</button>
-        <button onclick="toggleConfig()" style="background: #666; border: none; color: #fff; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-left: 10px;">Cancel</button>
+        <div style="margin-bottom: 15px;">
+            <label style="display: block; margin-bottom: 5px; font-size: 11px; color: #888;">MATCH PATTERN</label>
+            <input type="text" id="new-reactor-pattern" placeholder="e.g. sonnet-fast" />
+            <div class="info-box">If requested model name contains this string, this reactor activates.</div>
+        </div>
+        <div style="margin-bottom: 25px;">
+            <label style="display: block; margin-bottom: 5px; font-size: 11px; color: #888;">REACTOR THEME</label>
+            <input type="color" id="new-reactor-color" value="#ffaa00" style="height: 40px;" />
+        </div>
+        <div style="display: flex; gap: 15px;">
+            <button onclick="saveReactor()" style="flex: 1; background: #fff; border: none; color: #000; padding: 14px; cursor: pointer; font-weight: 800; font-size: 11px; text-transform: uppercase;">COMMIT</button>
+            <button onclick="closeConfig()" style="flex: 1; background: #222; border: none; color: #fff; padding: 14px; cursor: pointer; font-weight: 800; font-size: 11px; text-transform: uppercase;">ABORT</button>
+        </div>
     </div>
 
     <script>
-        // --- CONFIG & STATE ---
-        const PROVIDERS = [
-            { id: 'antigravity', icon: 'icon-antigravity', label: 'Antigravity' },
-            { id: 'zai', icon: 'icon-zai', label: 'Z.AI' },
-            { id: 'anthropic', icon: 'icon-anthropic', label: 'Anthropic' },
-            { id: 'copilot', icon: 'icon-copilot', label: 'GitHub Copilot' },
-            { id: 'openrouter', icon: 'icon-openrouter', label: 'OpenRouter' },
-            { id: 'custom', icon: 'icon-custom', label: 'Custom' }
-        ];
-
-        let state = {
-            config: {},         // Current local config
-            serverConfig: {},   // Server config (for diff)
-            models: {},         // Available models map
-            availability: {}    // Provider status
+        const PROVIDER_ICONS = {
+            'antigravity': 'icon-antigravity',
+            'zai': 'icon-zai',
+            'anthropic': 'icon-anthropic',
+            'copilot': 'icon-copilot',
+            'openrouter': 'icon-openrouter',
+            'custom': 'icon-custom'
         };
 
-        // --- MATH HELPERS ---
-        function polarToCartesian(centerX, centerY, radius, angleInDegrees) {
-            const angleInRadians = (angleInDegrees - 90) * Math.PI / 180.0;
-            return {
-                x: centerX + (radius * Math.cos(angleInRadians)),
-                y: centerY + (radius * Math.sin(angleInRadians))
-            };
-        }
+        const PROVIDER_LABELS = {
+            'antigravity': 'Antigravity',
+            'zai': 'Z.AI',
+            'anthropic': 'Anthropic',
+            'copilot': 'Copilot',
+            'openrouter': 'OpenRouter',
+            'custom': 'Custom (Env)'
+        };
 
-        function describeSector(x, y, rInner, rOuter, startAngle, endAngle) {
-            // Check if full circle
-            if (endAngle - startAngle >= 359.9) {
-                // Split into two arcs to avoid SVG rendering issues with full circles
-                return describeSector(x, y, rInner, rOuter, startAngle, startAngle + 180) + " " +
-                       describeSector(x, y, rInner, rOuter, startAngle + 180, endAngle).replace(/^M [^ ]+ [^ ]+ /, "");
-            }
+        let PROVIDERS = [];
+        let reactors = {}; 
+        let state = { config: { reactors: [] }, serverConfig: { reactors: [] }, models: {}, availability: {} };
 
-            const p1 = polarToCartesian(x, y, rOuter, endAngle);
-            const p2 = polarToCartesian(x, y, rOuter, startAngle);
-            const p3 = polarToCartesian(x, y, rInner, startAngle);
-            const p4 = polarToCartesian(x, y, rInner, endAngle);
+        const polarToCartesian = (cx, cy, r, deg) => {
+            const rad = (deg - 90) * Math.PI / 180.0;
+            return { x: cx + (r * Math.cos(rad)), y: cy + (r * Math.sin(rad)) };
+        };
 
-            const largeArc = endAngle - startAngle <= 180 ? 0 : 1;
+        const describeSector = (x, y, rInner, rOuter, startA, endA) => {
+            if (endA - startA >= 359.9) return `M ${x} ${y-rOuter} A ${rOuter} ${rOuter} 0 1 1 ${x-0.01} ${y-rOuter} L ${x-0.01} ${y-rInner} A ${rInner} ${rInner} 0 1 0 ${x} ${y-rInner} Z`;
+            const sO = polarToCartesian(x, y, rOuter, endA), eO = polarToCartesian(x, y, rOuter, startA), sI = polarToCartesian(x, y, rInner, endA), eI = polarToCartesian(x, y, rInner, startA);
+            const large = endA - startA <= 180 ? "0" : "1";
+            return ["M", sO.x, sO.y, "A", rOuter, rOuter, 0, large, 0, eO.x, eO.y, "L", eI.x, eI.y, "A", rInner, rInner, 0, large, 1, sI.x, sI.y, "Z"].join(" ");
+        };
 
-            return `
-                M ${p3.x} ${p3.y}
-                L ${p2.x} ${p2.y}
-                A ${rOuter} ${rOuter} 0 ${largeArc} 1 ${p1.x} ${p1.y}
-                L ${p4.x} ${p4.y}
-                A ${rInner} ${rInner} 0 ${largeArc} 0 ${p3.x} ${p3.y}
-                Z
-            `.replace(/\s+/g, ' ');
-        }
-
-        // --- RENDER ENGINE ---
         class Reactor {
-            constructor(el, tier) {
-                this.el = el;
-                this.tier = tier;
-                this.size = 400;
-                this.cx = 200;
-                this.cy = 200;
-                this.hoveredProvider = null;
-
-                // Radii configuration
-                this.rCore = 50;
-                this.rProvInner = 55;
-                this.rProvOuter = 110;
-                this.rModInner = 115;
-                this.rModOuter = 195;
-
-                this.initialized = false;
+            constructor(el, conf) {
+                this.el = el; this.id = conf.id; this.config = conf; this.hovered = null;
+                this.cx=200; this.cy=200; this.rC=50; this.rPI=55; this.rPO=110; this.rMI=115; this.rMO=195; this.initd = false;
             }
 
-            // Called once to set up the SVG structure and static paths
             init() {
                 this.el.innerHTML = `
-                    <svg viewBox="0 0 400 400" onmouseleave="reactorLeave('${this.tier}')">
-                        <defs>
-                            <filter id="glow-${this.tier}" x="-20%" y="-20%" width="140%" height="140%">
-                                <feGaussianBlur stdDeviation="5" result="blur" />
-                                <feComposite in="SourceGraphic" in2="blur" operator="over" />
-                            </filter>
-                        </defs>
-                        <g class="grp-core"></g>
-                        <g class="grp-prov"></g>
-                        <g class="grp-model"></g>
+                    <div class="btn-reactor-action btn-delete" onclick="removeUnit('${this.id}')">×</div>
+                    <div class="btn-reactor-action btn-edit" onclick="openConfig('${this.id}')">✎</div>
+                    <svg viewBox="0 0 400 400" onmouseleave="reactorLeave('${this.id}')">
+                        <defs><filter id="glow-${this.id}"><feGaussianBlur stdDeviation="5" /><feComposite in="SourceGraphic" operator="over" /></filter></defs>
+                        <g class="grp-c"></g><g class="grp-p"></g><g class="grp-m"></g>
                     </svg>
                 `;
-
-                this.drawCoreStatic();
-                this.drawProvidersStatic();
-                this.initialized = true;
+                this.drawCore(); this.drawProvs(); this.initd = true;
             }
 
-            drawCoreStatic() {
-                const g = this.el.querySelector('.grp-core');
-                g.innerHTML = `
-                    <circle cx="${this.cx}" cy="${this.cy}" r="${this.rCore}" class="layer-core" />
-                    <text x="${this.cx}" y="${this.cy - 10}" class="text-core-label">${this.tier.toUpperCase()}</text>
-                    <text x="${this.cx}" y="${this.cy + 15}" class="text-core-sub">...</text>
-                `;
+            drawCore() {
+                const g = this.el.querySelector('.grp-c'); this.el.style.setProperty('--theme', this.config.theme);
+                g.innerHTML = `<circle cx="${this.cx}" cy="${this.cy}" r="${this.rC}" class="layer-core" style="filter:url(#glow-${this.id})" />
+                               <text x="${this.cx}" y="${this.cy-10}" class="text-core-label">${this.config.label.toUpperCase()}</text>
+                               <text x="${this.cx}" y="${this.cy+15}" class="text-core-sub">...</text>`;
             }
 
-            drawProvidersStatic() {
-                const g = this.el.querySelector('.grp-prov');
-                const pCount = PROVIDERS.length;
-                const pStep = 360 / pCount;
-                const gap = 1; // 1 degree gap
-
-                let html = '';
-                PROVIDERS.forEach((p, i) => {
-                    const startA = i * pStep;
-                    const endA = (i + 1) * pStep;
-                    // Apply gap
-                    const d = describeSector(this.cx, this.cy, this.rProvInner, this.rProvOuter, startA + gap, endA - gap);
-
-                    const midA = startA + (pStep / 2);
-                    const iconPos = polarToCartesian(this.cx, this.cy, (this.rProvInner + this.rProvOuter)/2, midA);
-
-                    html += `
-                        <g class="prov-item" data-id="${p.id}"
-                           onmouseenter="reactorHover('${this.tier}', '${p.id}')"
-                           onclick="selectProvider('${this.tier}', '${p.id}')">
-                            <path d="${d}" class="layer-prov" />
-                            <use href="#${p.icon}" x="${iconPos.x - 12}" y="${iconPos.y - 12}" width="24" height="24"
-                                 class="prov-icon" style="pointer-events:none;" />
-                        </g>
-                    `;
-                });
-                g.innerHTML = html;
+            drawProvs() {
+                const g = this.el.querySelector('.grp-p');
+                if (!PROVIDERS.length) return;
+                const pStep = 360 / PROVIDERS.length;
+                let h = ''; PROVIDERS.forEach((p, i) => {
+                    const sA = i*pStep, eA = (i+1)*pStep, d = describeSector(this.cx, this.cy, this.rPI, this.rPO, sA+1, eA-1), m = sA+(pStep/2), pos = polarToCartesian(this.cx, this.cy, (this.rPI+this.rPO)/2, m);
+                    h += `<g class="prov-item" data-pid="${p.id}" onmouseenter="reactorHover('${this.id}','${p.id}')" onclick="selectProvider('${this.id}','${p.id}')">
+                            <path d="${d}" class="layer-prov" /><use href="#${p.icon}" x="${pos.x-10}" y="${pos.y-10}" width="20" height="20" class="prov-icon" /></g>`;
+                }); g.innerHTML = h;
             }
 
             render() {
-                if (!this.initialized) this.init();
-                this.update();
+                if(!this.initd) this.init();
+                const curP = this.config.provider_id, curM = this.config.model, tarP = this.hovered || curP;
+                const sub = this.el.querySelector('.text-core-sub'); if(sub) sub.textContent = clean(curM || 'AUTO').substring(0,14);
+                this.el.querySelectorAll('.prov-item').forEach(e => {
+                    const pid = e.dataset.pid, act = curP === pid, hov = this.hovered === pid, p = e.querySelector('path'), i = e.querySelector('use');
+                    p.classList.toggle('active', act && !this.hovered); p.classList.toggle('selected-dormant', act && this.hovered && !hov); p.classList.toggle('dim', tarP && pid !== tarP);
+                    i.classList.toggle('active', act); i.classList.toggle('hover', hov); i.classList.toggle('dim', tarP && pid !== tarP);
+                }); this.drawModels(curP, curM, tarP);
             }
 
-            update() {
-                const curProv = state.config[`${this.tier}_provider`];
-                const curMod = state.config[`${this.tier}_model`];
-                const targetProv = this.hoveredProvider || curProv;
-
-                // 1. Update Core Text
-                const subText = this.el.querySelector('.text-core-sub');
-                if(subText) subText.textContent = shortText(curMod);
-
-                // 2. Update Providers (Classes only)
-                const provItems = this.el.querySelectorAll('.prov-item');
-                provItems.forEach(el => {
-                    const pid = el.dataset.id;
-                    const path = el.querySelector('path');
-                    const icon = el.querySelector('use');
-
-                    const isHovered = this.hoveredProvider === pid;
-                    const isActive = curProv === pid;
-                    // Dormant: Selected but we are hovering someone else
-                    const isDormant = isActive && this.hoveredProvider && !isHovered;
-
-                    // Class Logic
-                    let classes = ['layer-prov'];
-                    let iconClasses = ['prov-icon'];
-
-                    if (isHovered) {
-                        classes.push('hover');
-                        iconClasses.push('hover');
-                    }
-                    if (isActive && !isDormant) {
-                        classes.push('active');
-                        iconClasses.push('active');
-                    }
-                    if (isDormant) {
-                        classes.push('selected-dormant');
-                        // No specific icon class for dormant, usually dim if inactive
-                    }
-
-                    // Dim non-target items
-                    if (targetProv && pid !== targetProv) {
-                        classes.push('dim');
-                        iconClasses.push('dim');
-                    }
-
-                    path.setAttribute('class', classes.join(' '));
-                    icon.setAttribute('class', iconClasses.join(' '));
-                });
-
-                // 3. Re-draw Models
-                this.drawModels(curProv, curMod, targetProv);
+            drawModels(curP, curM, tarP) {
+                const g = this.el.querySelector('.grp-m'); g.innerHTML = ''; if(!tarP) return;
+                const ms = (state.models[tarP] || []).filter(m => !m.includes('gemini-2.5'));
+                if(!ms.length) { g.innerHTML = `<circle cx="${this.cx}" cy="${this.cy}" r="${(this.rMI+this.rMO)/2}" stroke="#111" stroke-width="80" fill="none" opacity="0.1" />`; return; }
+                const step = 360/ms.length; let h = '';
+                ms.forEach((m, i) => {
+                    const sA = i*step, eA = (i+1)*step, sel = (curP===tarP && curM===m), d = describeSector(this.cx, this.cy, this.rMI, this.rMO, sA+0.5, eA-0.5), mid = sA+(step/2), pos = polarToCartesian(this.cx, this.cy, (this.rMI+this.rMO)/2, mid);
+                    let rot = mid-90; if(pos.x < this.cx) rot += 180;
+                    let l = clean(m); const max = Math.floor((step/360)*1250/8); if(l.length > max) l = l.substring(0, max-1)+'…';
+                    h += `<g onclick="selectModel('${this.id}','${tarP}','${m}')"><path d="${d}" class="layer-model visible ${sel?'selected':''}" /><text x="${pos.x}" y="${pos.y}" transform="rotate(${rot},${pos.x},${pos.y})" class="text-model">${l}</text></g>`;
+                }); g.innerHTML = h;
             }
-
-            drawModels(curProv, curMod, targetProv) {
-                const g = this.el.querySelector('.grp-model');
-
-                // If we don't know the target provider (e.g. init state), clear and return
-                if (!targetProv) {
-                     g.innerHTML = `<circle cx="${this.cx}" cy="${this.cy}" r="${(this.rModInner + this.rModOuter)/2}"
-                                        stroke="#111" stroke-width="${this.rModOuter - this.rModInner}" fill="none" opacity="0.2"/>`;
-                    return;
-                }
-
-                const models = getModelsFor(targetProv, this.tier);
-
-                // Clear previous
-                g.innerHTML = '';
-
-                if (models.length === 0) {
-                    // Draw empty track if no models for this provider
-                    g.innerHTML = `<circle cx="${this.cx}" cy="${this.cy}" r="${(this.rModInner + this.rModOuter)/2}"
-                                        stroke="#111" stroke-width="${this.rModOuter - this.rModInner}" fill="none" opacity="0.2"/>
-                                   <text x="${this.cx}" y="${this.cy + this.rModInner + 20}" fill="#444" font-size="10">NO CONFIG</text>`;
-                    return;
-                }
-
-                const totalArc = 360;
-                const startAngleGlobal = -90; // Start at top
-                const mStep = totalArc / models.length;
-
-                let html = '';
-
-                models.forEach((m, i) => {
-                    const startA = startAngleGlobal + (i * mStep);
-                    const endA = startA + mStep;
-
-                    // Improved Check: Strict match OR partial match (if version varies)
-                    let isSelected = (curMod === m) && (curProv === targetProv);
-                    if (!isSelected && curProv === targetProv && curMod && m) {
-                        // Soft match: if 'claude-3-5-sonnet' is selected but list has 'claude-3-5-sonnet-2024...'
-                        // or vice versa.
-                        if (m.includes(curMod) || curMod.includes(m)) {
-                             // Only if model base name is roughly same length to avoid matching 'claude' to everything
-                             if (Math.abs(m.length - curMod.length) < 15) {
-                                 isSelected = true;
-                             }
-                        }
-                    }
-
-                    // Gap logic
-                    const gap = models.length > 1 ? 0.5 : 0;
-                    const d = describeSector(this.cx, this.cy, this.rModInner, this.rModOuter, startA + gap, endA - gap);
-
-                    // Text Position
-                    const midA = startA + (mStep / 2);
-                    const normMidA = (midA % 360 + 360) % 360;
-
-                    const textRadius = (this.rModInner + this.rModOuter)/2;
-                    let textPos = polarToCartesian(this.cx, this.cy, textRadius, midA);
-
-                    let label = cleanName(m);
-
-                    // Text Rotation Fix
-                    let rot = normMidA - 90;
-
-                    // Simple logic: if rot is such that text is on the left half of the circle, flip it.
-                    // The circle angles: Top (-90), Right (0), Bottom (90), Left (180).
-                    // Wait, standard polar: 0 is right.
-                    // But our polarToCartesian uses (angle - 90).
-                    // So in our coord system:
-                    // 0 degrees input => (0-90) = -90 rad (Top)
-                    // 90 degrees input => (90-90) = 0 rad (Right)
-                    // 180 degrees input => (180-90) = 90 rad (Bottom)
-                    // 270 degrees input => (270-90) = 180 rad (Left)
-
-                    // Text rotation matches SVG rotation.
-                    // If rot is between 90 (bottom) and 270 (top via left), we need to flip.
-                    // Actually, let's normalize 'rot' to -180...180 range?
-
-                    // Standard visual check:
-                    // If the text is on the "left side" (x < cx), flip it.
-                    // But textPos is cartesian.
-
-                    if (textPos.x < this.cx) {
-                        rot += 180;
-                    }
-
-                    // Truncation
-                    const arcLenPx = (mStep/360) * (2 * Math.PI * textRadius);
-                    const maxChars = Math.floor(arcLenPx / 8); // Approx 8px per char
-
-                    if (maxChars < 3) label = "";
-                    else if (label.length > maxChars) label = label.substring(0, maxChars-1) + '…';
-
-                    html += `
-                        <g class="model-item" onclick="selectModel('${this.tier}', '${targetProv}', '${m}')">
-                            <path d="${d}" class="layer-model visible ${isSelected?'selected':''}" stroke="#000" stroke-width="1" />
-                            ${label ? `
-                            <text x="${textPos.x}" y="${textPos.y}"
-                                  transform="rotate(${rot}, ${textPos.x}, ${textPos.y})"
-                                  class="text-model">
-                                ${label}
-                            </text>` : ''}
-                        </g>
-                    `;
-                });
-
-                g.innerHTML = html;
-            }
-        }
-
-        // --- APP LOGIC ---
-        const reactors = {};
-
-        function init() {
-            ['sonnet', 'haiku', 'opus'].forEach(t => {
-                reactors[t] = new Reactor(document.getElementById(`mount-${t}`), t);
-            });
-            fetchData();
-            setInterval(fetchData, 2000);
         }
 
         async function fetchData() {
             try {
-                const r = await fetch('/config');
-                const d = await r.json();
-
-                // Diff check
-                const sLocal = JSON.stringify(state.config);
-                const sServer = JSON.stringify(d.config);
-                const dirty = sLocal !== "{}" && sLocal !== sServer;
-
-                if (Object.keys(state.config).length === 0) {
-                    // First load
-                    state.config = d.config;
-                    state.serverConfig = d.config;
-                    state.models = d.available_models;
-                    state.availability = d.providers_available;
-                    renderAll();
-                } else {
-                    // Background update
-                    // Only update if we aren't dirty (user isn't editing)
-                    // Or if we need to sync availability
-                    state.serverConfig = d.config;
-                    state.models = d.available_models;
-                    state.availability = d.providers_available;
-
-                    // If we are clean, update our local config to match server
-                    if (!dirty) {
-                        state.config = d.config;
-                        renderAll();
+                const k = new URLSearchParams(window.location.search).get('key'), r = await fetch(k?`/config?key=${k}`:'/config'), d = await r.json();
+                state.models = d.available_models; state.availability = d.providers_available; state.serverConfig = d.config;
+                if(!state.config.reactors.length) state.config = JSON.parse(JSON.stringify(d.config));
+                
+                // Build dynamic providers list
+                const newProvs = [];
+                Object.keys(d.providers_available).forEach(pid => {
+                    if (d.providers_available[pid]) {
+                        newProvs.push({
+                            id: pid,
+                            icon: PROVIDER_ICONS[pid] || 'icon-custom',
+                            label: PROVIDER_LABELS[pid] || pid.toUpperCase().replace(/-/g, ' ')
+                        });
                     }
+                });
+                
+                // Only re-init if provider count changed
+                if (newProvs.length !== PROVIDERS.length) {
+                    PROVIDERS = newProvs;
+                    Object.values(reactors).forEach(r => r.initd = false);
                 }
 
-                document.getElementById('sys-status').classList.toggle('ok', true);
-                updateButton(dirty);
-            } catch (e) {
-                document.getElementById('sys-status').classList.remove('ok');
-            }
+                sync(); checkDirty(); document.getElementById('sys-status').classList.add('ok');
+            } catch(e) { document.getElementById('sys-status').classList.remove('ok'); }
         }
 
-        function renderAll() {
-            Object.values(reactors).forEach(r => r.render());
+        function sync() {
+            const s = document.getElementById('reactor-stage'), ids = state.config.reactors.map(r => r.id);
+            Object.keys(reactors).forEach(id => { if(!ids.includes(id)){ reactors[id].el.remove(); delete reactors[id]; } });
+            state.config.reactors.forEach(c => {
+                if(!reactors[c.id]){ const d = document.createElement('div'); d.id = `m-${c.id}`; d.className = 'reactor'; s.appendChild(d); reactors[c.id] = new Reactor(d, c); }
+                else reactors[c.id].config = c; reactors[c.id].render();
+            });
         }
 
-        // --- INTERACTION ---
-        window.reactorHover = (tier, provId) => {
-            reactors[tier].hoveredProvider = provId;
-            reactors[tier].render();
+        window.reactorHover = (id, p) => { if(reactors[id]){ reactors[id].hovered = p; reactors[id].render(); } tooltip(p); };
+        window.reactorLeave = (id) => { if(reactors[id]){ reactors[id].hovered = null; reactors[id].render(); } tooltip(null); };
+        function tooltip(p){ const tt = document.getElementById('tooltip'); if(!p){ tt.classList.remove('visible'); return; } tt.textContent = PROVIDERS.find(x => x.id === p)?.label || p; tt.classList.add('visible'); }
+        document.addEventListener('mousemove', e => { const tt = document.getElementById('tooltip'); if(tt.classList.contains('visible')){ tt.style.left = (e.pageX+15)+'px'; tt.style.top = (e.pageY+15)+'px'; } });
 
-            // Show tooltip
-            const label = PROVIDERS.find(p => p.id === provId)?.label || provId;
-            const tt = document.getElementById('tooltip');
-            tt.textContent = label;
-            tt.classList.add('visible');
-        };
+        window.selectProvider = (rid, pid) => { const r = state.config.reactors.find(x => x.id === rid); if(r){ r.provider_id = pid; const ms = (state.models[pid] || []).filter(m => !m.includes('gemini-2.5')); if(ms.length) r.model = ms[0]; sync(); checkDirty(); } };
+        window.selectModel = (rid, pid, mid) => { const r = state.config.reactors.find(x => x.id === rid); if(r){ r.provider_id = pid; r.model = mid; sync(); checkDirty(); } };
+        window.removeUnit = (rid) => { if (confirm(`Decommission reactor [${rid.toUpperCase()}]?`)){ state.config.reactors = state.config.reactors.filter(r => r.id !== rid); sync(); checkDirty(); } };
 
-        // Mouse move to track tooltip position
-        document.addEventListener('mousemove', (e) => {
-            const tt = document.getElementById('tooltip');
-            if (tt.classList.contains('visible')) {
-                tt.style.left = (e.pageX + 10) + 'px';
-                tt.style.top = (e.pageY + 10) + 'px';
+        function openConfig(rid = null) {
+            const m = document.getElementById('config-section'); m.style.display = 'block';
+            if(rid) {
+                const r = state.config.reactors.find(x => x.id === rid);
+                document.getElementById('modal-title').textContent = 'RECONFIGURE_UNIT';
+                document.getElementById('edit-id').value = rid;
+                document.getElementById('new-reactor-id').value = r.id;
+                document.getElementById('new-reactor-id').disabled = true;
+                document.getElementById('new-reactor-label').value = r.label;
+                document.getElementById('new-reactor-pattern').value = r.pattern;
+                document.getElementById('new-reactor-color').value = r.theme;
+            } else {
+                document.getElementById('modal-title').textContent = 'NEW_REACTOR_UNIT';
+                document.getElementById('edit-id').value = '';
+                document.getElementById('new-reactor-id').value = '';
+                document.getElementById('new-reactor-id').disabled = false;
+                document.getElementById('new-reactor-label').value = '';
+                document.getElementById('new-reactor-pattern').value = '';
+                document.getElementById('new-reactor-color').value = '#ffaa00';
             }
-        });
+        }
+        window.openConfig = openConfig;
+        function closeConfig() { document.getElementById('config-section').style.display = 'none'; }
+        window.closeConfig = closeConfig;
 
-        window.reactorLeave = (tier) => {
-            reactors[tier].hoveredProvider = null;
-            reactors[tier].render();
+        function saveReactor() {
+            const editId = document.getElementById('edit-id').value, id = document.getElementById('new-reactor-id').value.trim().toLowerCase(), label = document.getElementById('new-reactor-label').value.trim(), pattern = document.getElementById('new-reactor-pattern').value.trim(), theme = document.getElementById('new-reactor-color').value;
+            if(!id || !label) return alert("ID and Label required");
+            if(editId) {
+                const r = state.config.reactors.find(x => x.id === editId);
+                r.label = label; r.pattern = pattern; r.theme = theme;
+            } else {
+                if(state.config.reactors.find(r => r.id === id)) return alert("ID must be unique");
+                state.config.reactors.push({ id, label, pattern, theme, provider_id: 'anthropic', model: '' });
+            }
+            closeConfig(); sync(); checkDirty();
+        }
+        window.saveReactor = saveReactor;
 
-            // Hide tooltip
-            document.getElementById('tooltip').classList.remove('visible');
-        };
-
-        window.selectProvider = (tier, provId) => {
-            state.config[`${tier}_provider`] = provId;
-            // Auto-select first/best model if current model is not from this provider
-            const currentModel = state.config[`${tier}_model`];
-            const ms = getModelsFor(provId, tier);
-
-            // Should we switch model? Only if current model isn't in the new provider's list
-            // But strict tier matching implies we should pick a default.
-            if(ms.length) state.config[`${tier}_model`] = ms[0];
-
-            renderAll();
-            checkDirty();
-        };
-
-        window.selectModel = (tier, provId, modelId) => {
-            state.config[`${tier}_provider`] = provId;
-            state.config[`${tier}_model`] = modelId;
-            renderAll();
-            checkDirty();
-        };
-
+        function checkDirty() { const dirty = JSON.stringify(state.config) !== JSON.stringify(state.serverConfig); const btn = document.getElementById('btn-apply'); btn.classList.toggle('ready', dirty); btn.textContent = dirty ? "APPLY CHANGES" : "SYSTEM ACTIVE"; }
         window.applyChanges = async () => {
-            const btn = document.getElementById('btn-apply');
-            btn.innerText = "SAVING...";
-            try {
-                await fetch('/config', {
-                    method: 'POST',
-                    headers: {'Content-Type':'application/json'},
-                    body: JSON.stringify(state.config)
-                });
-                btn.innerText = "System Updated";
-                setTimeout(() => btn.innerText = "INITIALIZE SYSTEM", 2000);
-
-                // Update server config reference
-                state.serverConfig = JSON.parse(JSON.stringify(state.config));
-                checkDirty();
-                fetchData(); // Reload
-            } catch (e) {
-                btn.innerText = "ERROR SAVING";
-                setTimeout(() => btn.innerText = "INITIALIZE SYSTEM", 2000);
-            }
+            if(!document.getElementById('btn-apply').classList.contains('ready')) return;
+            const k = new URLSearchParams(window.location.search).get('key');
+            try { await fetch(k?`/config?key=${k}`:'/config', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(state.config) }); state.serverConfig = JSON.parse(JSON.stringify(state.config)); checkDirty(); fetchData(); } catch(e){ alert(e); }
         };
 
-        function checkDirty() {
-            const dirty = JSON.stringify(state.config) !== JSON.stringify(state.serverConfig);
-            updateButton(dirty);
-        }
-
-        function updateButton(dirty) {
-            const btn = document.getElementById('btn-apply');
-            if(dirty) {
-                btn.classList.add('ready');
-                btn.innerText = "APPLY CHANGES";
-            }
-            else {
-                btn.classList.remove('ready');
-                btn.innerText = "SYSTEM ACTIVE";
-            }
-
-            // Show config button if custom provider is active/hovered? No, always if available.
-            const btnConfig = document.getElementById('btn-config');
-            btnConfig.style.display = 'inline-block';
-        }
-
-        // --- UTILS ---
-        function getModelsFor(prov, tier) {
-            let ms = state.models[prov] || [];
-            // Cleanup: remove gemini-2.5, remove exact provider name matches (e.g. 'z.ai' in 'z.ai' list)
-            ms = ms.filter(x => {
-                // Filter out non-matching models for this tier if possible?
-                // The backend returns ALL models for a provider, not split by tier.
-                // We have to show all of them or guess.
-                // For now, show all.
-                if (x.includes('gemini-2.5')) return false;
-                if (x === prov) return false;
-                return true;
-            });
-            return ms;
-        }
-
-        function shortText(t) {
-            if(!t) return '';
-            return cleanName(t).substring(0, 15);
-        }
-
-        function cleanName(t) {
-             let s = t.toLowerCase();
-             // Remove provider prefixes commonly seen
-             s = s.replace('anthropic/','')
-                  .replace('google/','')
-                  .replace('openai/','')
-                  .replace('mistral/','')
-                  .replace('meta/','')
-                  .replace('z.ai/','')
-                  .replace('zai/','')
-                  .replace('cohere/','')
-                  .replace('deepseek/','')
-                  .replace('perplexity/','');
-
-            // Remove common model prefixes
-            s = s.replace('claude-','')
-                 .replace('gemini-','')
-                 .replace('gpt-','')
-                 .replace('llama-','')
-                 .replace('mistral-','');
-
-            return s.toUpperCase();
-        }
-
-        // Configuration functions
-        function toggleConfig() {
-            const configSection = document.getElementById('config-section');
-            configSection.style.display = configSection.style.display === 'none' ? 'block' : 'none';
-        }
-
-        function saveCustomConfig() {
-            const config = {
-                custom_api_key: document.getElementById('custom-api-key').value,
-                custom_base_url: document.getElementById('custom-base-url').value,
-                custom_sonnet_model: document.getElementById('custom-sonnet-model').value,
-                custom_haiku_model: document.getElementById('custom-haiku-model').value,
-                custom_opus_model: document.getElementById('custom-opus-model').value
-            };
-
-            // Save to local storage temporarily
-            localStorage.setItem('custom_config', JSON.stringify(config));
-
-            // Apply the configuration
-            applyCustomConfig(config);
-
-            // Hide config section
-            toggleConfig();
-        }
-
-        function applyCustomConfig(config) {
-            if (!config.custom_api_key || !config.custom_base_url) {
-                alert('Please fill in API Key and API URL');
-                return;
-            }
-
-            // Update .env file with custom provider settings (Visual only in this view)
-            updateEnvFile({
-                CUSTOM_PROVIDER_API_KEY: config.custom_api_key,
-                CUSTOM_PROVIDER_BASE_URL: config.custom_base_url,
-                CUSTOM_PROVIDER_SONNET_MODEL: config.custom_sonnet_model,
-                CUSTOM_PROVIDER_HAIKU_MODEL: config.custom_haiku_model,
-                CUSTOM_PROVIDER_OPUS_MODEL: config.custom_opus_model
-            });
-
-            // Note: In a real app we'd need to send this to the server to persist in .env
-            // Here we assume the user might need to edit .env manually if this was purely static.
-            // But since we have a server, we could add an endpoint.
-            // For now, we trust the implementation plan which didn't include backend changes for saving custom config to .env.
-            // We just update the runtime selection to 'custom'.
-
-            // Force update current selection to custom
-            ['sonnet', 'haiku', 'opus'].forEach(tier => {
-                 // state.config[`${tier}_provider`] = 'custom';
-            });
-
-            applyChanges();
-        }
-
-        function updateEnvFile(updates) {
-            console.log('Updating env with:', updates);
-        }
-
-        // Start
+        function clean(s) { if(!s) return ''; return s.toLowerCase().replace(/^(anthropic|google|openai|zai|z\.ai|meta|mistral|deepseek)\//, '').replace(/^(claude|gemini|gpt|llama|mistral)-/, '').toUpperCase(); }
+        async function init() { await fetchData(); setInterval(fetchData, 4000); }
         document.addEventListener('DOMContentLoaded', init);
-
     </script>
 </body>
 </html>

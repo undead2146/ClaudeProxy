@@ -4,7 +4,7 @@ Provider routing logic — determines which backend to send each request to.
 
 import os
 from typing import Optional, Tuple
-
+import core.config as config
 from core.config import (
     logger, config_lock, runtime_config,
     # Z.AI
@@ -17,167 +17,105 @@ from core.config import (
     ANTIGRAVITY_SONNET_MODEL, ANTIGRAVITY_HAIKU_MODEL, ANTIGRAVITY_OPUS_MODEL,
     # Copilot
     ENABLE_COPILOT, GITHUB_COPILOT_BASE_URL,
-    GITHUB_COPILOT_SONNET_MODEL, GITHUB_COPILOT_HAIKU_MODEL, GITHUB_COPILOT_OPUS_MODEL,
     # OpenRouter
     OPENROUTER_API_KEY, OPENROUTER_BASE_URL,
-    OPENROUTER_SONNET_MODEL, OPENROUTER_HAIKU_MODEL, OPENROUTER_OPUS_MODEL,
-    # Anthropic
-    ANTHROPIC_HAIKU_MODEL,
-    # Provider getters
-    get_sonnet_provider, get_haiku_provider, get_opus_provider,
-    build_custom_provider_models,
+    # Custom
+    CUSTOM_PROVIDER_API_KEY, CUSTOM_PROVIDER_BASE_URL,
+    providers_lock,
 )
 
+def determine_model_tier(model: str) -> str:
+    """Categorize the requested model into one of the configured reactors."""
+    m = model.lower()
+    
+    with config.config_lock:
+        reactors = config.runtime_config.get("reactors", [])
+        
+        # 1. Try exact matches on configured model names first (legacy/Z.AI/Antigravity)
+        if ZAI_HAIKU_MODEL and model == ZAI_HAIKU_MODEL: return "haiku"
+        if ZAI_SONNET_MODEL and model == ZAI_SONNET_MODEL: return "sonnet"
+        if ZAI_OPUS_MODEL and model == ZAI_OPUS_MODEL: return "opus"
+        if ANTIGRAVITY_HAIKU_MODEL and model == ANTIGRAVITY_HAIKU_MODEL: return "haiku"
+        if ANTIGRAVITY_SONNET_MODEL and model == ANTIGRAVITY_SONNET_MODEL: return "sonnet"
+        if ANTIGRAVITY_OPUS_MODEL and model == ANTIGRAVITY_OPUS_MODEL: return "opus"
+        
+        # 2. Match against dynamic reactor patterns (Longest match first for priority)
+        sorted_reactors = sorted(reactors, key=lambda r: len(r.get("pattern", "")), reverse=True)
+        for r in sorted_reactors:
+            pattern = r.get("pattern", "").lower()
+            if pattern and pattern in m:
+                return r["id"]
+                
+    # Default fallback
+    if "haiku" in m or "flash" in m or "gemini" in m: return "haiku"
+    if "opus" in m: return "opus"
+    return "sonnet"
 
 def get_provider_config(model: str) -> Tuple[Optional[str], Optional[str], str, str, str]:
     """Determine which provider to use based on model name.
-
-    Returns: (api_key, base_url, tier, translated_model, provider_type)
-    provider_type can be: 'glm', 'antigravity', 'anthropic', or 'unknown'
+    Returns: (api_key, base_url, reactor_id, translated_model, provider_type)
     """
-    # Detect tier from model name
-    tier = "Unknown"
-    model_lower = model.lower()
-
-    # First, check if model matches any configured model names
-    if ZAI_HAIKU_MODEL and model == ZAI_HAIKU_MODEL:
-        tier = "Haiku"
-    elif ZAI_SONNET_MODEL and model == ZAI_SONNET_MODEL:
-        tier = "Sonnet"
-    elif ZAI_OPUS_MODEL and model == ZAI_OPUS_MODEL:
-        tier = "Opus"
-    elif ANTIGRAVITY_HAIKU_MODEL and model == ANTIGRAVITY_HAIKU_MODEL:
-        tier = "Haiku"
-    elif ANTIGRAVITY_SONNET_MODEL and model == ANTIGRAVITY_SONNET_MODEL:
-        tier = "Sonnet"
-    elif ANTIGRAVITY_OPUS_MODEL and model == ANTIGRAVITY_OPUS_MODEL:
-        tier = "Opus"
-    # Then check for tier keywords in model name
-    elif "haiku" in model_lower:
-        tier = "Haiku"
-    elif "sonnet" in model_lower:
-        tier = "Sonnet"
-    elif "opus" in model_lower:
-        tier = "Opus"
-    # Check for Z.AI model patterns
-    elif model_lower.startswith("glm-") or model_lower.startswith("zai-"):
-        if "5" in model_lower or "flash" in model_lower:
-            tier = "Haiku"
-        else:
-            tier = "Sonnet"
-    # Check for Gemini model patterns
-    elif model_lower.startswith("gemini-"):
-        if "flash" in model_lower:
-            tier = "Haiku"
-        else:
-            tier = "Sonnet"
-
-    # Get current provider configuration (thread-safe)
-    current_sonnet_provider = get_sonnet_provider()
-    current_haiku_provider = get_haiku_provider()
-    current_opus_provider = get_opus_provider()
-
-    # Get selected models from runtime config
+    reactor_id = determine_model_tier(model)
+    
     with config_lock:
-        sonnet_model = runtime_config.get("sonnet_model", ANTIGRAVITY_SONNET_MODEL)
-        haiku_model = runtime_config.get("haiku_model", ANTIGRAVITY_HAIKU_MODEL)
-        opus_model = runtime_config.get("opus_model", ANTIGRAVITY_OPUS_MODEL)
+        reactors = runtime_config.get("reactors", [])
+        reactor = next((r for r in reactors if r["id"] == reactor_id), None)
+        
+        if not reactor:
+            # Emergency fallback to old config structure if reactors list is missing
+            provider_id = runtime_config.get(f"{reactor_id}_provider", "antigravity")
+            target_model = runtime_config.get(f"{reactor_id}_model", model)
+        else:
+            provider_id = reactor["provider_id"]
+            target_model = reactor["model"] or model
 
-    # Route based on configured provider for this tier
-    if tier == "Sonnet":
-        if current_sonnet_provider == "antigravity" and ANTIGRAVITY_ENABLED:
-            logger.info(f"[Proxy] Routing Sonnet  Antigravity ({sonnet_model})")
-            return None, ANTIGRAVITY_BASE_URL, tier, sonnet_model, "antigravity"
-        elif current_sonnet_provider in ["glm", "zai"] and SONNET_PROVIDER_API_KEY and SONNET_PROVIDER_BASE_URL:
-            zai_model = sonnet_model if sonnet_model else ZAI_SONNET_MODEL
-            logger.info(f"[Proxy] Routing Sonnet → Z.AI ({zai_model})")
-            return SONNET_PROVIDER_API_KEY, SONNET_PROVIDER_BASE_URL, tier, zai_model, "zai"
-        elif current_sonnet_provider == "copilot" and ENABLE_COPILOT:
-            logger.info(f"[Proxy] Routing Sonnet  GitHub Copilot ({sonnet_model})")
-            return None, GITHUB_COPILOT_BASE_URL, tier, sonnet_model, "copilot"
-        elif current_sonnet_provider == "openrouter" and OPENROUTER_API_KEY:
-            logger.info(f"[Proxy] Routing Sonnet  OpenRouter ({OPENROUTER_SONNET_MODEL})")
-            return OPENROUTER_API_KEY, OPENROUTER_BASE_URL, tier, OPENROUTER_SONNET_MODEL, "openrouter"
-        elif current_sonnet_provider == "custom":
-            custom_api_key = os.getenv("CUSTOM_PROVIDER_API_KEY")
-            custom_base_url = os.getenv("CUSTOM_PROVIDER_BASE_URL")
-            if custom_api_key and custom_base_url:
-                logger.info(f"[Proxy] Routing Sonnet  Custom Provider ({sonnet_model})")
-                return custom_api_key, custom_base_url, tier, sonnet_model, "custom"
+    # Route based on provider_id
+    # 1. Anthropic (Direct/OAuth)
+    if provider_id == "anthropic":
+        logger.info(f"[Proxy] Routing {reactor_id.upper()} → Anthropic (Direct/OAuth)")
+        target_model = target_model or model
+        return None, None, reactor_id, target_model, "anthropic"
 
-        # Fallback — either anthropic was explicitly chosen, or the chosen provider is misconfigured
-        if current_sonnet_provider == "anthropic":
-            logger.info(f"[Proxy] Routing Sonnet → Anthropic (OAuth) using original model: {model}")
-            return None, None, tier, model, "anthropic"
+    # 2. Antigravity (Google Provider)
+    if provider_id == "antigravity":
+        logger.info(f"[Proxy] Routing {reactor_id.upper()} → Antigravity ({target_model})")
+        return None, ANTIGRAVITY_BASE_URL, reactor_id, target_model, "antigravity"
 
-        # Provider is set but prerequisites are missing — return error, don't silently reroute
-        logger.error(f"[Proxy] Sonnet provider '{current_sonnet_provider}' is configured but missing API key or prerequisites")
-        return None, None, tier, model, "misconfigured"
+    # 3. Copilot
+    if provider_id == "copilot":
+        logger.info(f"[Proxy] Routing {reactor_id.upper()} → GitHub Copilot ({target_model})")
+        return None, GITHUB_COPILOT_BASE_URL, reactor_id, target_model, "copilot"
 
-    elif tier == "Haiku":
-        if current_haiku_provider == "antigravity" and ANTIGRAVITY_ENABLED:
-            logger.info(f"[Proxy] Routing Haiku  Antigravity ({haiku_model})")
-            return None, ANTIGRAVITY_BASE_URL, tier, haiku_model, "antigravity"
-        elif current_haiku_provider in ["glm", "zai"] and HAIKU_PROVIDER_API_KEY and HAIKU_PROVIDER_BASE_URL:
-            zai_model = haiku_model if haiku_model else ZAI_HAIKU_MODEL
-            logger.info(f"[Proxy] Routing Haiku → Z.AI ({zai_model})")
-            return HAIKU_PROVIDER_API_KEY, HAIKU_PROVIDER_BASE_URL, tier, zai_model, "zai"
-        elif current_haiku_provider == "copilot" and ENABLE_COPILOT:
-            logger.info(f"[Proxy] Routing Haiku  GitHub Copilot ({haiku_model})")
-            return None, GITHUB_COPILOT_BASE_URL, tier, haiku_model, "copilot"
-        elif current_haiku_provider == "openrouter" and OPENROUTER_API_KEY:
-            logger.info(f"[Proxy] Routing Haiku  OpenRouter ({OPENROUTER_HAIKU_MODEL})")
-            return OPENROUTER_API_KEY, OPENROUTER_BASE_URL, tier, OPENROUTER_HAIKU_MODEL, "openrouter"
-        elif current_haiku_provider == "custom":
-            custom_api_key = os.getenv("CUSTOM_PROVIDER_API_KEY")
-            custom_base_url = os.getenv("CUSTOM_PROVIDER_BASE_URL")
-            if custom_api_key and custom_base_url:
-                logger.info(f"[Proxy] Routing Haiku  Custom Provider ({haiku_model})")
-                return custom_api_key, custom_base_url, tier, haiku_model, "custom"
+    # 4. OpenRouter
+    if provider_id == "openrouter":
+        logger.info(f"[Proxy] Routing {reactor_id.upper()} → OpenRouter ({target_model})")
+        return OPENROUTER_API_KEY, OPENROUTER_BASE_URL, reactor_id, target_model, "openrouter"
 
-        if current_haiku_provider == "anthropic":
-            logger.info(f"[Proxy] Routing Haiku → Anthropic (OAuth) using original model: {model}")
-            return None, None, tier, model, "anthropic"
+    # 5. Z.AI / GLM (Legacy fallback)
+    if provider_id in ["glm", "zai"]:
+         api_key = SONNET_PROVIDER_API_KEY if reactor_id == "sonnet" else \
+                  HAIKU_PROVIDER_API_KEY if reactor_id == "haiku" else \
+                  OPUS_PROVIDER_API_KEY
+         base_url = SONNET_PROVIDER_BASE_URL if reactor_id == "sonnet" else \
+                   HAIKU_PROVIDER_BASE_URL if reactor_id == "haiku" else \
+                   OPUS_PROVIDER_BASE_URL
+         logger.info(f"[Proxy] Routing {reactor_id.upper()} → Z.AI ({target_model})")
+         return api_key, base_url, reactor_id, target_model, "zai"
 
-        logger.error(f"[Proxy] Haiku provider '{current_haiku_provider}' is configured but missing API key or prerequisites")
-        return None, None, tier, model, "misconfigured"
+    # 6. Custom Providers
+    # Check for hardcoded 'custom' from .env
+    if provider_id == "custom":
+        if CUSTOM_PROVIDER_API_KEY and CUSTOM_PROVIDER_BASE_URL:
+            logger.info(f"[Proxy] Routing {reactor_id.upper()} → Hardcoded Custom Provider ({target_model})")
+            return CUSTOM_PROVIDER_API_KEY, CUSTOM_PROVIDER_BASE_URL, reactor_id, target_model, "custom"
 
-    elif tier == "Opus":
-        if current_opus_provider == "antigravity" and ANTIGRAVITY_ENABLED:
-            logger.info(f"[Proxy] Routing Opus  Antigravity ({opus_model})")
-            return None, ANTIGRAVITY_BASE_URL, tier, opus_model, "antigravity"
-        elif current_opus_provider in ["glm", "zai"] and OPUS_PROVIDER_API_KEY and OPUS_PROVIDER_BASE_URL:
-            zai_model = opus_model if opus_model else ZAI_OPUS_MODEL
-            logger.info(f"[Proxy] Routing Opus → Z.AI ({zai_model})")
-            return OPUS_PROVIDER_API_KEY, OPUS_PROVIDER_BASE_URL, tier, zai_model, "zai"
-        elif current_opus_provider == "copilot" and ENABLE_COPILOT:
-            logger.info(f"[Proxy] Routing Opus ? GitHub Copilot ({GITHUB_COPILOT_OPUS_MODEL})")
-            return None, GITHUB_COPILOT_BASE_URL, tier, GITHUB_COPILOT_OPUS_MODEL, "copilot"
-        elif current_opus_provider == "openrouter" and OPENROUTER_API_KEY:
-            logger.info(f"[Proxy] Routing Opus  OpenRouter ({OPENROUTER_OPUS_MODEL})")
-            return OPENROUTER_API_KEY, OPENROUTER_BASE_URL, tier, OPENROUTER_OPUS_MODEL, "openrouter"
-        elif current_opus_provider == "custom":
-            custom_api_key = os.getenv("CUSTOM_PROVIDER_API_KEY")
-            custom_base_url = os.getenv("CUSTOM_PROVIDER_BASE_URL")
-            if custom_api_key and custom_base_url:
-                logger.info(f"[Proxy] Routing Opus  Custom Provider ({opus_model})")
-                return custom_api_key, custom_base_url, tier, opus_model, "custom"
+    # Check dynamic custom providers
+    with providers_lock:
+        for p in config.custom_providers:
+            if provider_id == p["id"]:
+                logger.info(f"[Proxy] Routing {reactor_id.upper()} → {p['name']} ({target_model})")
+                return p["api_key"], p["base_url"], reactor_id, target_model, "custom"
 
-        if current_opus_provider == "anthropic":
-            logger.info(f"[Proxy] Routing Opus → Anthropic (OAuth) using original model: {model}")
-            return None, None, tier, model, "anthropic"
-
-        logger.error(f"[Proxy] Opus provider '{current_opus_provider}' is configured but missing API key or prerequisites")
-        return None, None, tier, model, "misconfigured"
-
-    # Unknown model - default to Haiku routing
-    logger.warning(f"[Proxy] Unknown model tier for '{model}', defaulting to Haiku tier")
-    current_haiku_provider = get_haiku_provider()
-    if current_haiku_provider == "antigravity" and ANTIGRAVITY_ENABLED:
-        return None, ANTIGRAVITY_BASE_URL, "Haiku", ANTIGRAVITY_HAIKU_MODEL, "antigravity"
-    elif current_haiku_provider in ["glm", "zai"] and HAIKU_PROVIDER_API_KEY and HAIKU_PROVIDER_BASE_URL:
-        return HAIKU_PROVIDER_API_KEY, HAIKU_PROVIDER_BASE_URL, "Haiku", haiku_model or ZAI_HAIKU_MODEL, "zai"
-    elif current_haiku_provider == "copilot" and ENABLE_COPILOT:
-        return None, GITHUB_COPILOT_BASE_URL, "Haiku", haiku_model, "copilot"
-    else:
-        return None, None, "Unknown", ANTHROPIC_HAIKU_MODEL, "anthropic"
+    # Provider is set but prerequisites are missing — return error
+    logger.error(f"[Proxy] Reactor '{reactor_id}' uses unknown or misconfigured provider '{provider_id}'")
+    return None, None, reactor_id, target_model, "misconfigured"

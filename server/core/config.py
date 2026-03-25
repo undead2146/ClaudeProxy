@@ -55,20 +55,24 @@ ANTIGRAVITY_OPUS_MODEL = os.getenv("ANTIGRAVITY_OPUS_MODEL", "gemini-3-pro-high"
 # ---------------------------------------------------------------------------
 # GitHub Copilot configuration
 # ---------------------------------------------------------------------------
-ENABLE_COPILOT = os.getenv("ENABLE_COPILOT", "false").lower() == "true"
-GITHUB_COPILOT_BASE_URL = os.getenv("GITHUB_COPILOT_BASE_URL", "http://localhost:4141")
-GITHUB_COPILOT_SONNET_MODEL = os.getenv("GITHUB_COPILOT_SONNET_MODEL", "claude-sonnet-4.5")
-GITHUB_COPILOT_HAIKU_MODEL = os.getenv("GITHUB_COPILOT_HAIKU_MODEL", "claude-haiku-4.5")
-GITHUB_COPILOT_OPUS_MODEL = os.getenv("GITHUB_COPILOT_OPUS_MODEL", "claude-opus-4.5")
+ENABLE_COPILOT = os.getenv("ENABLE_COPILOT", "true").lower() == "true"
+GITHUB_CLIENT_ID = "Iv1.b507a08c87ecfe98"
+GITHUB_BASE_URL = "https://github.com"
+GITHUB_API_BASE_URL = "https://api.github.com"
+GITHUB_COPILOT_API_URL = "https://api.githubcopilot.com"
+GITHUB_COPILOT_BASE_URL = os.getenv("GITHUB_COPILOT_BASE_URL", GITHUB_COPILOT_API_URL)
+GITHUB_COPILOT_SONNET_MODEL = os.getenv("GITHUB_COPILOT_SONNET_MODEL", "claude-sonnet-4.6")
+GITHUB_COPILOT_HAIKU_MODEL = os.getenv("GITHUB_COPILOT_HAIKU_MODEL", "claude-haiku-4.6")
+GITHUB_COPILOT_OPUS_MODEL = os.getenv("GITHUB_COPILOT_OPUS_MODEL", "claude-opus-4.6")
 
 # ---------------------------------------------------------------------------
 # OpenRouter configuration
 # ---------------------------------------------------------------------------
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api")
-OPENROUTER_SONNET_MODEL = os.getenv("OPENROUTER_SONNET_MODEL", "anthropic/claude-sonnet-4.5")
-OPENROUTER_HAIKU_MODEL = os.getenv("OPENROUTER_HAIKU_MODEL", "anthropic/claude-haiku-4.5")
-OPENROUTER_OPUS_MODEL = os.getenv("OPENROUTER_OPUS_MODEL", "anthropic/claude-opus-4.5")
+OPENROUTER_SONNET_MODEL = os.getenv("OPENROUTER_SONNET_MODEL", "anthropic/claude-sonnet-4.6")
+OPENROUTER_HAIKU_MODEL = os.getenv("OPENROUTER_HAIKU_MODEL", "anthropic/claude-haiku-4.6")
+OPENROUTER_OPUS_MODEL = os.getenv("OPENROUTER_OPUS_MODEL", "anthropic/claude-opus-4.6")
 
 # ---------------------------------------------------------------------------
 # Custom provider configuration
@@ -76,8 +80,8 @@ OPENROUTER_OPUS_MODEL = os.getenv("OPENROUTER_OPUS_MODEL", "anthropic/claude-opu
 CUSTOM_PROVIDER_API_KEY = os.getenv("CUSTOM_PROVIDER_API_KEY")
 CUSTOM_PROVIDER_BASE_URL = os.getenv("CUSTOM_PROVIDER_BASE_URL")
 CUSTOM_PROVIDER_SONNET_MODEL = os.getenv("CUSTOM_PROVIDER_SONNET_MODEL", "claude-sonnet-4.5")
-CUSTOM_PROVIDER_HAIKU_MODEL = os.getenv("CUSTOM_PROVIDER_HAIKU_MODEL", "claude-haiku-4.5")
-CUSTOM_PROVIDER_OPUS_MODEL = os.getenv("CUSTOM_PROVIDER_OPUS_MODEL", "claude-opus-4.5")
+CUSTOM_PROVIDER_HAIKU_MODEL = os.getenv("CUSTOM_PROVIDER_HAIKU_MODEL", "claude-sonnet-4.5")
+CUSTOM_PROVIDER_OPUS_MODEL = os.getenv("CUSTOM_PROVIDER_OPUS_MODEL", "claude-sonnet-4.5")
 
 # ---------------------------------------------------------------------------
 # Anthropic (OAuth) default model mappings
@@ -105,6 +109,7 @@ REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "300.0"))
 # ---------------------------------------------------------------------------
 CONFIG_FILE = Path("config.json")
 FAVORITES_FILE = Path("favorites.json")
+CUSTOM_PROVIDERS_FILE = Path("custom_providers.json")
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -112,13 +117,13 @@ FAVORITES_FILE = Path("favorites.json")
 log_file = os.getenv("CLAUDE_PROXY_LOG_FILE")
 logging_config = {
     "level": logging.INFO,
-    "format": '%(asctime)s - %(levelname)s - %(message)s',
+    "format": "%(asctime)s - %(levelname)s - %(message)s",
 }
 
 if log_file:
     os.makedirs(os.path.dirname(os.path.abspath(log_file)), exist_ok=True)
     logging_config["filename"] = log_file
-    logging_config["filemode"] = 'a'
+    logging_config["filemode"] = "a"
 else:
     logging_config["stream"] = sys.stdout
 
@@ -143,14 +148,17 @@ class BufferHandler(logging.Handler):
 
 
 buffer_handler = BufferHandler()
-buffer_handler.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
+buffer_handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
 logger.addHandler(buffer_handler)
 
 # ---------------------------------------------------------------------------
 # Runtime configuration (thread-safe)
 # ---------------------------------------------------------------------------
-config_lock = threading.Lock()
-favorites_lock = threading.Lock()
+config_lock = threading.RLock()
+favorites_lock = threading.RLock()
+providers_lock = threading.RLock()
+
+custom_providers = []
 
 runtime_config = {
     "sonnet_provider": os.getenv("SONNET_PROVIDER", "antigravity"),
@@ -159,31 +167,63 @@ runtime_config = {
     "sonnet_model": os.getenv("ANTIGRAVITY_SONNET_MODEL", "gemini-3-pro-high"),
     "haiku_model": os.getenv("ANTIGRAVITY_HAIKU_MODEL", "gemini-3-flash"),
     "opus_model": os.getenv("ANTIGRAVITY_OPUS_MODEL", "gemini-3-pro-high"),
+    "copilot_github_token": None,
+    "copilot_access_token": None,
+    "copilot_expires_at": 0,
+    "copilot_models": [
+        "gpt-4.1", "gpt-5-mini", "grok-code-fast-1", "raptor-mini",
+        "claude-haiku-4.6", "claude-sonnet-4.6", "claude-opus-4.6",
+        "gemini-3-flash-preview", "gemini-3-pro-preview", "gemini-2.5-pro",
+        "gpt-5.1-codex-max", "gpt-5.1-codex-mini", "gpt-5.2-codex"
+    ],
+    "reactors": [
+        {
+            "id": "sonnet",
+            "label": "Sonnet",
+            "pattern": "sonnet",
+            "provider_id": os.getenv("SONNET_PROVIDER", "antigravity"),
+            "model": os.getenv("ANTIGRAVITY_SONNET_MODEL", "gemini-3-pro-high"),
+            "theme": "#ffaa00"
+        },
+        {
+            "id": "haiku",
+            "label": "Haiku",
+            "pattern": "haiku",
+            "provider_id": os.getenv("HAIKU_PROVIDER", "antigravity"),
+            "model": os.getenv("ANTIGRAVITY_HAIKU_MODEL", "gemini-3-flash"),
+            "theme": "#00ffaa"
+        },
+        {
+            "id": "opus",
+            "label": "Opus",
+            "pattern": "opus",
+            "provider_id": os.getenv("OPUS_PROVIDER", "anthropic"),
+            "model": os.getenv("ANTIGRAVITY_OPUS_MODEL", "gemini-3-pro-high"),
+            "theme": "#aa00ff"
+        }
+    ],
     "last_updated": datetime.now().isoformat()
 }
 
 
 def get_sonnet_provider():
     with config_lock:
-        return runtime_config.get("sonnet_provider", "antigravity")
-
+        return runtime_config.get("sonnet_provider", SONNET_PROVIDER)
 
 def get_haiku_provider():
     with config_lock:
-        return runtime_config.get("haiku_provider", "antigravity")
-
+        return runtime_config.get("haiku_provider", HAIKU_PROVIDER)
 
 def get_opus_provider():
     with config_lock:
-        return runtime_config.get("opus_provider", "anthropic")
-
+        return runtime_config.get("opus_provider", OPUS_PROVIDER)
 
 def load_config():
     """Load configuration from file."""
     global runtime_config
     if CONFIG_FILE.exists():
         try:
-            with open(CONFIG_FILE, 'r') as f:
+            with open(CONFIG_FILE, "r") as f:
                 loaded_config = json.load(f)
                 with config_lock:
                     runtime_config.update(loaded_config)
@@ -194,12 +234,44 @@ def load_config():
     else:
         save_config()
 
+    load_custom_providers()
+
+
+def load_custom_providers():
+    """Load custom providers from file."""
+    global custom_providers
+    if CUSTOM_PROVIDERS_FILE.exists():
+        try:
+            with open(CUSTOM_PROVIDERS_FILE, "r", encoding="utf-8") as f:
+                loaded = json.load(f)
+                with providers_lock:
+                    custom_providers = loaded
+                logger.info(f"[Config] Loaded {len(custom_providers)} custom providers from {CUSTOM_PROVIDERS_FILE}")
+        except Exception as e:
+            logger.error(f"[Config] Failed to load custom providers: {e}")
+    else:
+        # Create empty file if it doesn't exist
+        save_custom_providers([])
+
+
+def save_custom_providers(providers):
+    """Save custom providers to file."""
+    global custom_providers
+    try:
+        with providers_lock:
+            custom_providers = providers
+            with open(CUSTOM_PROVIDERS_FILE, "w", encoding="utf-8") as f:
+                json.dump(custom_providers, f, indent=2)
+        logger.info(f"[Config] Saved custom providers to {CUSTOM_PROVIDERS_FILE}")
+    except Exception as e:
+        logger.error(f"[Config] Failed to save custom providers: {e}")
+
 
 def save_config():
     """Save current configuration to file."""
     try:
         with config_lock:
-            with open(CONFIG_FILE, 'w') as f:
+            with open(CONFIG_FILE, "w") as f:
                 json.dump(runtime_config, f, indent=2)
         logger.info(f"[Config] Saved configuration to {CONFIG_FILE}")
     except Exception as e:
@@ -212,8 +284,8 @@ def build_custom_provider_models() -> list:
     models = [
         # Claude (latest only)
         "claude-opus-4.6",
-        "claude-sonnet-4.5",
-        "claude-haiku-4.5",
+        "claude-sonnet-4.6",
+        "claude-haiku-4.6",
 
         # DeepSeek
         "deepseek-v3.2",
@@ -251,6 +323,14 @@ def build_custom_provider_models() -> list:
         models.append(haiku_model)
     if opus_model and opus_model not in models:
         models.append(opus_model)
+
+    # Add models from dynamic custom providers
+    with providers_lock:
+        for provider in custom_providers:
+            p_models = provider.get("models", [])
+            for m in p_models:
+                if m and m not in models:
+                    models.append(m)
 
     # Remove duplicates while preserving order
     seen = set()

@@ -50,6 +50,14 @@ from api.endpoints import (
     copilot_usage_proxy,
     antigravity_health_proxy,
     dashboard_endpoint,
+    get_providers_endpoint,
+    add_provider_endpoint,
+    update_provider_endpoint,
+    delete_provider_endpoint,
+    providers_page_endpoint,
+    copilot_login_start,
+    copilot_login_poll,
+    copilot_status,
 )
 
 # ---------------------------------------------------------------------------
@@ -73,6 +81,14 @@ routes = [
     Route("/api/copilot/usage", copilot_usage_proxy, methods=["GET"]),
     Route("/api/antigravity/health", antigravity_health_proxy, methods=["GET"]),
     Route("/test-antigravity", test_antigravity_endpoint, methods=["GET"]),
+    Route("/api/providers", get_providers_endpoint, methods=["GET"]),
+    Route("/api/providers", add_provider_endpoint, methods=["POST"]),
+    Route("/api/providers/{id}", update_provider_endpoint, methods=["PUT"]),
+    Route("/api/providers/{id}", delete_provider_endpoint, methods=["DELETE"]),
+    Route("/providers.html", providers_page_endpoint, methods=["GET"]),
+    Route("/api/copilot/login/start", copilot_login_start, methods=["GET"]),
+    Route("/api/copilot/login/poll", copilot_login_poll, methods=["GET"]),
+    Route("/api/copilot/status", copilot_status, methods=["GET"]),
     Route("/dashboard", dashboard_endpoint, methods=["GET"]),
     Route("/", dashboard_endpoint, methods=["GET"]),
 ]
