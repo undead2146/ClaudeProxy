@@ -1,9 +1,14 @@
 # Environment variables (contains API keys)
 .env
-.*/
-*.pid
 
+# Configuration and Local State (SENSITIVE)
+config.json
+custom_providers.json
+favorites.json
+token_usage.json
+credentials.json
 .claude/
+.antigravity/
 
 # Python
 __pycache__/

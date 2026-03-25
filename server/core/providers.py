@@ -15,7 +15,7 @@ from core.config import (
     OPENROUTER_API_KEY, OPENROUTER_BASE_URL,
     CUSTOM_PROVIDER_API_KEY, CUSTOM_PROVIDER_BASE_URL,
 )
-from core.sanitize import filter_beta_header, sanitize_for_custom, fix_streaming_tool_inputs
+from core.sanitize import filter_beta_header, sanitize_for_custom, fix_streaming_tool_inputs, redact_text
 from core.copilot import copilot_manager
 from core.convert import convert_anthropic_to_openai, convert_openai_to_anthropic, convert_openai_stream_to_anthropic_async
 from services.token_tracker import TokenUsageTracker
@@ -185,7 +185,7 @@ async def proxy_to_copilot(body_json: dict, original_headers: dict, endpoint: st
                         save_config()
 
                 if response.status_code != 200:
-                    error_text = response.text
+                    error_text = redact_text(response.text)
                     logger.error(f"[Copilot] Error: {error_text[:500]}")
                     return JSONResponse(content={"error": error_text}, status_code=response.status_code)
 
@@ -207,7 +207,7 @@ async def proxy_to_copilot(body_json: dict, original_headers: dict, endpoint: st
                         save_config()
 
                 if response.status_code != 200:
-                    error_text = response.text
+                    error_text = redact_text(response.text)
                     logger.error(f"[Copilot] Error: {error_text[:500]}")
                     return JSONResponse(
                         content=response.json() if response.headers.get("content-type") == "application/json" else {"error": error_text},
@@ -296,7 +296,7 @@ async def proxy_to_openrouter(body_json: dict, original_headers: dict, endpoint:
                 logger.info(f"[OpenRouter] Response status: {response.status_code}")
 
                 if response.status_code != 200:
-                    logger.error(f"[OpenRouter] Error: {response.text[:500]}")
+                    logger.error(f"[OpenRouter] Error: {redact_text(response.text)[:500]}")
                     return JSONResponse(
                         content=response.json(),
                         status_code=response.status_code,
@@ -396,7 +396,7 @@ async def proxy_to_custom(body_json: dict, original_headers: dict, endpoint: str
                 logger.info(f"[Custom] Response status: {response.status_code}")
 
                 if response.status_code != 200:
-                    logger.error(f"[Custom] Error: {response.text[:500]}")
+                    logger.error(f"[Custom] Error: {redact_text(response.text)[:500]}")
                     return JSONResponse(
                         content=response.json(),
                         status_code=response.status_code,

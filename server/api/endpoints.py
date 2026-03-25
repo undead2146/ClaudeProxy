@@ -28,7 +28,7 @@ from core.config import (
 import core.config as config
 from core.oauth import get_oauth_token, has_oauth_credentials
 from core.routing import get_provider_config
-from core.sanitize import is_reasoning_model, filter_beta_header
+from core.sanitize import is_reasoning_model, filter_beta_header, redact_sensitive_info
 from core.providers import (
     proxy_to_antigravity, proxy_to_copilot, proxy_to_openrouter, proxy_to_custom,
     token_tracker,
@@ -300,12 +300,12 @@ async def get_config_endpoint(request: Request):
     custom_api_key = os.getenv("CUSTOM_PROVIDER_API_KEY")
     custom_base_url = os.getenv("CUSTOM_PROVIDER_BASE_URL")
     providers_available = {
-        "antigravity": ANTIGRAVITY_ENABLED,
+        "antigravity": True,  # Enabled by default now
         "zai": bool(ZAI_HAIKU_MODEL or ZAI_SONNET_MODEL or ZAI_OPUS_MODEL),
         "anthropic": has_oauth_credentials(),
-        "copilot": ENABLE_COPILOT,
-        "openrouter": bool(OPENROUTER_API_KEY),
-        "custom": True  # Always available now as dynamic providers
+        "copilot": True,      # Enabled by default now
+        "openrouter": True,   # Enabled by default now
+        "custom": True        # Always available now as dynamic providers
     }
 
     # Add dynamic providers to availability
@@ -392,7 +392,7 @@ async def update_config_endpoint(request: Request):
 
         save_config()
 
-        logger.info(f"[Config] Updated routing configuration: {updates}")
+        logger.info(f"[Config] Updated routing configuration: {redact_sensitive_info(updates)}")
 
         return JSONResponse(content={
             "status": "success",

@@ -9,6 +9,7 @@ from typing import Optional, Dict, Any, List
 from pathlib import Path
 
 from core.config import logger, GITHUB_CLIENT_ID, GITHUB_BASE_URL, GITHUB_API_BASE_URL, config_lock, runtime_config, save_config
+from core.sanitize import redact_sensitive_info
 
 class CopilotManager:
     """
@@ -74,7 +75,7 @@ class CopilotManager:
             return {"status": "error", "error": response.text}
         
         data = response.json()
-        logger.info(f"[Copilot] Poll data: {data}")
+        logger.info(f"[Copilot] Poll data: {redact_sensitive_info(data)}")
             
         if "error" in data:
             error = data["error"]

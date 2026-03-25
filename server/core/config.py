@@ -16,7 +16,13 @@ from collections import deque
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
-load_dotenv()
+# Try current directory and then parent directory to support running from 'server' folder
+if os.path.exists(".env"):
+    load_dotenv(".env")
+elif os.path.exists("../.env"):
+    load_dotenv("../.env")
+else:
+    load_dotenv()
 
 # ---------------------------------------------------------------------------
 # Authentication
@@ -43,7 +49,7 @@ ZAI_OPUS_MODEL = os.getenv("GLM_OPUS_MODEL") or os.getenv("ZAI_OPUS_MODEL", "glm
 # ---------------------------------------------------------------------------
 # Antigravity configuration
 # ---------------------------------------------------------------------------
-ANTIGRAVITY_ENABLED = os.getenv("ANTIGRAVITY_ENABLED", "false").lower() == "true"
+ANTIGRAVITY_ENABLED = os.getenv("ANTIGRAVITY_ENABLED", "true").lower() == "true"
 ANTIGRAVITY_PORT = int(os.getenv("ANTIGRAVITY_PORT", "8081"))
 ANTIGRAVITY_BASE_URL = f"http://localhost:{ANTIGRAVITY_PORT}"
 ANTIGRAVITY_CONFIG_DIR = os.getenv("ANTIGRAVITY_CONFIG_DIR", ".antigravity")
@@ -273,6 +279,12 @@ def save_config():
         with config_lock:
             with open(CONFIG_FILE, "w") as f:
                 json.dump(runtime_config, f, indent=2)
+        # Also copy to root if we are in server folder for double protection
+        if os.path.basename(os.getcwd()) == "server":
+            try:
+                with open("../config.json", "w") as f:
+                    json.dump(runtime_config, f, indent=2)
+            except: pass
         logger.info(f"[Config] Saved configuration to {CONFIG_FILE}")
     except Exception as e:
         logger.error(f"[Config] Failed to save configuration: {e}")

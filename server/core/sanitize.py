@@ -11,6 +11,40 @@ import hashlib
 from core.config import logger
 
 
+def redact_sensitive_info(data: any) -> any:
+    """Recursively mask sensitive keys in a dictionary or list."""
+    sensitive_keys = {
+        "api_key", "api-key", "x-api-key", "authorization", 
+        "access_token", "github_token", "copilot_github_token", "copilot_access_token",
+        "token", "key", "secret", "password"
+    }
+    
+    if isinstance(data, dict):
+        return {
+            k: (f"{v[:4]}...{v[-4:]}" if k.lower() in sensitive_keys and isinstance(v, str) and len(v) > 10 else "****" if k.lower() in sensitive_keys else redact_sensitive_info(v))
+            for k, v in data.items()
+        }
+    elif isinstance(data, list):
+        return [redact_sensitive_info(item) for item in data]
+    return data
+
+
+def redact_text(text: str) -> str:
+    """Mask common token formats in raw text/logs."""
+    if not text or not isinstance(text, str):
+        return text
+    
+    import re
+    # Mask GitHub tokens (ghu_, ghp_, etc.)
+    text = re.sub(r'gh[uops]_[a-zA-Z0-9]{30,}', 'ghx_****', text)
+    # Mask Copilot tid= tokens
+    text = re.sub(r'tid=[a-zA-Z0-9]{32,}', 'tid=****', text)
+    # Mask typical Bearer tokens or long hex/base64 strings that look like keys
+    # text = re.sub(r'Bearer\s+[a-zA-Z0-9\._\-]{20,}', 'Bearer ****', text)
+    
+    return text
+
+
 def generate_signature(thinking_content: str) -> str:
     """Generate a valid signature for thinking block."""
     return hashlib.sha256(thinking_content.encode()).hexdigest()[:32]
