@@ -217,23 +217,43 @@ class CopilotManager:
     def map_model(self, model_id: str) -> str:
         """
         Map a requested model ID to a valid Copilot model ID.
-        If it contains 'sonnet', use claude-3.5-sonnet.
-        If it contains 'gpt-4' or 'opus', use gpt-4o.
-        Fallback to gpt-4o.
+        Checks for exact matches and handles versions intelligently to prevent demotions.
         """
         m = model_id.lower()
-        if "sonnet" in m:
-            return "claude-3.5-sonnet"
-        if "gpt-4o" in m:
-            return "gpt-4o"
-        if "gpt-4" in m or "opus" in m:
-            return "gpt-4o"
+        
+        # 1. Exact match check against active models list
+        supported_models = runtime_config.get("copilot_models", [])
+        if model_id in supported_models:
+            return model_id
+            
+        # 2. More granular matching for specific versions
+        if "4.6" in m:
+            if "sonnet" in m: return "claude-sonnet-4.6"
+            if "haiku" in m: return "claude-haiku-4.6"
+            if "opus" in m: return "claude-opus-4.6"
+            
+        if "3.7" in m:
+             if "sonnet" in m: return "claude-3.7-sonnet"
+             
+        if "3.5" in m or "3-5" in m:
+            if "sonnet" in m: return "claude-3.5-sonnet"
+            if "haiku" in m: return "claude-3.5-haiku"
+            
+        # 3. Generalized keyword fallbacks
+        if "gpt-4o" in m: return "gpt-4o"
+        if "gpt-4" in m or "opus" in m: return "gpt-4o"
+        
         if "gemini" in m:
-            if "flash" in m:
-                return "gemini-1.5-flash"
+            if "flash" in m: return "gemini-1.5-flash"
             return "gemini-1.5-pro"
         
-        return "gpt-4o" # Safe default for most Copilot accounts
+        # 4. Final attempt: see if any supported model contains tokens from our request
+        if "sonnet" in m:
+            # Prefer 4.6 if available in the user's account
+            if "claude-sonnet-4.6" in supported_models: return "claude-sonnet-4.6"
+            return "claude-3.5-sonnet"
+            
+        return "gpt-4o" # General fallback for Copilot
 
 # Singleton instance
 copilot_manager = CopilotManager()
